@@ -53,8 +53,7 @@ Logs: `/opt/FrameForge/webapp/logs`
 
 ## Services
 - `frameforge-webapp.service`: runs the Node web UI from `/opt/FrameForge/webapp`, logs to `webapp/logs/webapp.service.log`.
-- `frameforge-queue.service`: Python watcher that pulls from `00_import_queue` and triggers the pipeline.
-Manage with `systemctl status|logs|restart frameforge-webapp.service frameforge-queue.service`.
+Manage with `systemctl status|logs|restart frameforge-webapp.service`.
 
 ## Cleaning helpers
 `python clean.py --import|--work|--output|--train|--all` to prune inputs, workspace, outputs, or training artifacts. The webapp retains history in SQLite; delete via the UI or `DELETE /api/run/:id`.
