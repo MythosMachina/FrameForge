@@ -236,6 +236,8 @@ AUTOCHAR_ALLOWLIST = [
     r"riza_hawkeye",
 ]
 
+RUN_PREFIX_RE = re.compile(r"^[0-9]{6}[_-]")
+
 
 @dataclass
 class TaggerSettings:
@@ -446,6 +448,14 @@ def load_autochar_lists(preset: Optional[str]) -> Tuple[List[str], List[str]]:
     return block, allow
 
 
+def strip_run_prefix(name: str) -> str:
+    """
+    Remove leading RunID prefixes (e.g., 123456_name) from folder names
+    so trigger tags stay clean.
+    """
+    return RUN_PREFIX_RE.sub("", name, count=1)
+
+
 def load_hsv(image_path: Path) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Load image and return H, S, V channels as float arrays:
@@ -625,8 +635,10 @@ def tag_folder(
                 allow = autochar_allow if autochar_allow is not None else AUTOCHAR_ALLOWLIST
             print(f"[info] Autochar filtering enabled for {ds.name} ({len(patterns or [])} patterns, preset={preset_name or 'default'})")
 
-        for image_path in iter_images(ds):
+        trigger = strip_run_prefix(ds.name).strip("_- ")
+        if not trigger:
             trigger = ds.name
+        for image_path in iter_images(ds):
             tag_line = predict_tags(
                 image_path=image_path,
                 labels=labels,
