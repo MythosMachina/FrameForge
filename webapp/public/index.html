@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FrameForge Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div class="logo-block">
+        <div class="gear"></div>
+        <div class="wordmark">
+          <span class="brand">FrameForge</span>
+          <span class="tagline">automate. refine. deliver.</span>
+        </div>
+      </div>
+      <nav class="nav">
+        <a href="#queue">Dashboard</a>
+        <a href="#upload">Upload</a>
+        <a href="#autochar">AutoChar</a>
+        <a href="#settings">Settings</a>
+      </nav>
+      <div class="status-pill">
+        <span class="dot dot-green"></span> Orchestrator Ready
+      </div>
+    </header>
+
+    <main>
+      <section data-section="hero" class="panel hero hidden">
+        <div>
+          <h1>Ship datasets with factory-grade control</h1>
+          <p>Upload, configure, and monitor FrameForge runs with a steampunk-inspired command center. GPU-aware, queue-driven, and ready for production.</p>
+          <div class="cta">
+            <a class="btn primary" href="#upload">Start a run</a>
+            <a class="btn ghost" href="#queue">View live queue</a>
+          </div>
+        </div>
+        <div class="hero-card">
+          <div class="hero-metric">
+            <div class="metric-value">06</div>
+            <div class="metric-label">Concurrent Slots</div>
+          </div>
+          <div class="hero-metric">
+            <div class="metric-value">18m</div>
+            <div class="metric-label">Avg. Runtime</div>
+          </div>
+          <div class="hero-metric">
+            <div class="metric-value">GPU</div>
+            <div class="metric-label">CUDA enabled</div>
+          </div>
+        </div>
+      </section>
+
+      <section data-section="upload" class="panel">
+        <form class="upload-form upload-layout" enctype="multipart/form-data">
+          <div class="upload-left">
+            <div class="panel-header">
+              <h2>New Dataset Run</h2>
+              <p>Upload ZIP, choose type and modes. Each submission gets a unique 6-digit RunID.</p>
+            </div>
+            <label class="field file-column">
+            <span>Dataset ZIP</span>
+            <div class="file-drop tall">
+              <input type="file" name="zip" accept=".zip" multiple required>
+              <p>Drag & drop or click to select (multiple allowed)</p>
+              <div class="file-name" id="selected-file"></div>
+            </div>
+          </label>
+          </div>
+          <div class="form upload-right">
+          <div class="field toggles">
+            <label><input type="checkbox" name="autotag" checked> autotag</label>
+            <label><input type="checkbox" name="autochar" checked> autochar</label>
+            <label><input type="checkbox" name="facecap"> facecap</label>
+            <label><input type="checkbox" name="train"> train</label>
+            <label class="gpu-toggle"><input type="checkbox" name="gpu" checked> use GPU when available</label>
+          </div>
+          <label class="field">
+            <span>AutoChar Presets (Mehrfachauswahl möglich)</span>
+            <select name="autocharPresets" id="autochar-presets" multiple size="5">
+              <option value="human">human</option>
+              <option value="furry">furry</option>
+              <option value="dragon">dragon</option>
+              <option value="daemon">daemon</option>
+              <option value="default">default</option>
+            </select>
+            <div class="hint">Wenn leer, wird automatisch der Character-Type genutzt.</div>
+          </label>
+          <div class="field">
+            <span>Notes / tags</span>
+            <input type="text" name="note" placeholder="Optional note for history">
+          </div>
+          <div class="actions">
+            <button class="btn primary" type="submit">Launch Run</button>
+            <div class="hint">RunID will prefix the working folder but will be stripped from trigger tags and final downloads.</div>
+            <div class="status-msg" id="upload-msg"></div>
+          </div>
+          </div>
+        </form>
+      </section>
+
+      <section data-section="queue" class="panel hidden">
+        <div class="panel-header">
+          <h2>Dashboard</h2>
+          <p>Live queue and recent history at a glance.</p>
+        </div>
+        <div class="grid-2">
+          <div>
+            <h3 class="subhead">Queue</h3>
+            <div class="cards" id="queue-list">
+              <div class="empty">
+                <p>No active runs. Submit a dataset to start the pipeline.</p>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h3 class="subhead">History</h3>
+            <div class="grid-3" id="history-list">
+              <div class="card empty">
+                <p>No finished datasets yet. Completed runs will appear here with download links.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section data-section="settings" class="panel grid-2 hidden">
+        <div class="panel-header">
+          <h2>Settings</h2>
+          <p>Control concurrency, cleanup, and GPU preference.</p>
+        </div>
+        <div class="form compact">
+          <label class="field inline">
+            <span>Max parallel runs</span>
+            <input type="number" value="2" min="1" max="8">
+          </label>
+          <label class="field inline">
+            <span>Auto-clean after run</span>
+            <input type="checkbox" checked>
+          </label>
+          <label class="field inline">
+            <span>Default GPU usage</span>
+            <select>
+              <option>Prefer GPU</option>
+              <option>GPU only</option>
+              <option>CPU only</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section data-section="autochar" class="panel hidden">
+        <div class="panel-header">
+          <h2>AutoChar Presets</h2>
+          <p>Bearbeite Block/Allow-Listen direkt im Browser.</p>
+        </div>
+        <div class="grid-2 autochar-layout">
+          <div>
+            <h3 class="subhead">Presets</h3>
+            <div id="autochar-list" class="cards"></div>
+          </div>
+          <div class="autochar-editor">
+            <h3 class="subhead">Neu / Bearbeiten</h3>
+            <form id="autochar-form" class="form compact">
+              <input type="hidden" name="id" value="">
+              <label class="field">
+                <span>Name</span>
+                <input type="text" name="name" required placeholder="z.B. default">
+              </label>
+              <label class="field">
+                <span>Beschreibung</span>
+                <input type="text" name="description" placeholder="optional">
+              </label>
+              <label class="field full-width">
+                <span>Autoremove Tags (eine pro Zeile)</span>
+                <textarea name="blockPatterns" rows="12" placeholder="^.*hair$"></textarea>
+              </label>
+              <div class="actions" style="margin-top: 10px; gap: 10px;">
+                <button type="submit" class="btn primary">Speichern</button>
+                <button type="button" id="autochar-reset" class="btn ghost">Neu</button>
+                <div class="status-msg" id="autochar-msg"></div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

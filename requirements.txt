@@ -1,0 +1,8 @@
+numpy
+Pillow
+torch
+transformers
+timm
+safetensors
+watchdog
+diffusers
