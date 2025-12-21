@@ -2,6 +2,8 @@
 
 FrameForge is a “drop in your clips, get a clean dataset out” toolchain. You feed it ZIPs or videos and it handles the chores: renaming, frame grabs, smart picks, crops/flips, autotagging, and optional LoRA training (trainer runs but still needs fine-tuning). A simple web UI keeps the steps, queue, and cleanup rules (AutoChar) in one place. Everything except training works in CPU mode; GPU greatly speeds things up and the trainer requires a GPU (optimized for Nvidia).
 
+Continues development ongoing. For Updates Join our Discord: https://discord.gg/XpQBeuuMJK
+
 ## Features
 - Drop-in pipeline (`workflow.py`) with optional autotagging (`--autotag`, `--autochar`, `--gpu`) and training (`--train`).
 - Web UI with upload queue, history, multi-zip support, and AutoChar preset editor (stored in SQLite).
