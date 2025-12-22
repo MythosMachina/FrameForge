@@ -457,6 +457,8 @@ function wireSettings() {
   const taggerRepoInput = document.getElementById("tagger-repo-id");
   const taggerDownloadBtn = document.getElementById("tagger-download");
   const taggerDefaultDisplay = document.getElementById("tagger-default");
+  const taggerPresetSelect = document.getElementById("tagger-preset");
+  const taggerPresetStatus = document.getElementById("tagger-preset-status");
   const ids = [
     "capping_fps",
     "capping_jpeg_quality",
@@ -662,6 +664,23 @@ function wireSettings() {
     taggerMsg.className = `status-msg ${cls}`;
   };
 
+  const renderPresetStatus = (modelMap = new Map()) => {
+    if (!taggerPresetStatus || !taggerPresetSelect) return;
+    const repoId = taggerPresetSelect.value;
+    if (!repoId) {
+      taggerPresetStatus.textContent = "";
+      return;
+    }
+    const record = modelMap.get(repoId);
+    if (!record) {
+      taggerPresetStatus.textContent = "Not installed yet.";
+      return;
+    }
+    const status = (record.status || "unknown").toLowerCase();
+    const sizeLabel = record.size ? formatBytes(record.size) : "0 B";
+    taggerPresetStatus.textContent = `${status} • ${sizeLabel}`;
+  };
+
   const renderTaggerModels = (models = []) => {
     if (!taggerList) return;
     taggerList.innerHTML = "";
@@ -680,7 +699,14 @@ function wireSettings() {
       name.textContent = m.repoId;
       const meta = document.createElement("div");
       meta.className = "meta";
-      meta.textContent = `${formatBytes(m.size)} • ${m.status}`;
+      const size = document.createElement("span");
+      size.textContent = formatBytes(m.size);
+      const status = document.createElement("span");
+      const statusKey = String(m.status || "unknown").toLowerCase();
+      status.className = `pill tagger-status tagger-${statusKey}`;
+      status.textContent = statusKey;
+      meta.appendChild(size);
+      meta.appendChild(status);
       const actions = document.createElement("div");
       actions.className = "actions";
       if (settingsCache.autotag_model_id === m.repoId) {
@@ -745,7 +771,10 @@ function wireSettings() {
     try {
       const res = await fetch("/api/tagger-models");
       const data = await res.json();
+      const items = data.models || [];
+      const map = new Map(items.map((m) => [m.repoId, m]));
       renderTaggerModels(data.models || []);
+      renderPresetStatus(map);
     } catch (err) {
       setTaggerMsg("Failed to load models", "error");
     }
@@ -778,6 +807,15 @@ function wireSettings() {
   if (taggerDownloadBtn) {
     taggerDownloadBtn.addEventListener("click", async () => {
       await doDownload();
+    });
+  }
+
+  if (taggerPresetSelect && taggerRepoInput) {
+    taggerPresetSelect.addEventListener("change", async () => {
+      if (taggerPresetSelect.value) {
+        taggerRepoInput.value = taggerPresetSelect.value;
+      }
+      await loadModels();
     });
   }
 
