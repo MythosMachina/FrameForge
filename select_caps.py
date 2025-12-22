@@ -10,21 +10,21 @@ import random
 import re
 import shutil
 from pathlib import Path
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Tuple, Optional
 
 import numpy as np
 from PIL import Image
 
 # Configuration (bundle-local paths by default)
 BUNDLE_ROOT = Path(__file__).resolve().parent
-SRC_ROOT = BUNDLE_ROOT / "30_work" / "raw"  # filled with capped frames
-DEST_ROOT = BUNDLE_ROOT / "30_work"  # final picks land here (per character)
+SYSTEM_ROOT = BUNDLE_ROOT / "_system"
+SRC_ROOT = SYSTEM_ROOT / "workflow" / "raw"  # filled with capped frames
+DEST_ROOT = SYSTEM_ROOT / "workflow" / "work"  # final picks land here (per character)
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 TARGET_PER_CHARACTER = 40
 FACE_QUOTA = 10  # target number of close-ups; rest will be non-face
 HAMMING_THRESHOLD = 6  # increase for more variety, decrease if too few images selected
 HAMMING_RELAXED = 4  # fallback threshold if diversity is too strict
-PRESET_DIRS = {"furry", "human", "dragon", "daemon"}
 
 
 def iter_images(folder: Path) -> Iterable[Path]:
@@ -62,6 +62,8 @@ def select_diverse(
     paths: List[Path],
     limit: int,
     seed_hashes: List[np.ndarray] | None = None,
+    threshold: int = HAMMING_THRESHOLD,
+    relaxed: int = HAMMING_RELAXED,
 ) -> List[Tuple[Path, np.ndarray]]:
     """
     Select images that are at least HAMMING_THRESHOLD apart.
@@ -70,7 +72,7 @@ def select_diverse(
     selected: List[Tuple[Path, np.ndarray]] = []
     used_paths: set[Path] = set()
 
-    def run_with_threshold(threshold: int, seeds: List[np.ndarray]) -> None:
+    def run_with_threshold(thresh: int, seeds: List[np.ndarray]) -> None:
         hashes: List[np.ndarray] = list(seeds)
         nonlocal selected, used_paths
         for p in sorted(paths):
@@ -80,7 +82,7 @@ def select_diverse(
                 h = phash(p)
             except Exception:
                 continue
-            if all(hamming(h, prev_hash) >= threshold for prev_hash in hashes):
+            if all(hamming(h, prev_hash) >= thresh for prev_hash in hashes):
                 hashes.append(h)
                 selected.append((p, h))
                 used_paths.add(p)
@@ -88,9 +90,9 @@ def select_diverse(
                 break
 
     seeds = list(seed_hashes) if seed_hashes else []
-    run_with_threshold(HAMMING_THRESHOLD, seeds)
+    run_with_threshold(threshold, seeds)
     if len(selected) < limit:
-        run_with_threshold(HAMMING_RELAXED, seeds)
+        run_with_threshold(relaxed, seeds)
     return selected
 
 
@@ -99,6 +101,8 @@ def run_selection(
     dest_root: Path = DEST_ROOT,
     face_quota: int = FACE_QUOTA,
     target_per_char: int = TARGET_PER_CHARACTER,
+    hamming_threshold: int = HAMMING_THRESHOLD,
+    hamming_relaxed: int = HAMMING_RELAXED,
 ) -> None:
     if not src_root.exists():
         print(f"[warn] source root not found: {src_root}")
@@ -112,14 +116,9 @@ def run_selection(
         datasets: List[tuple[Path, Optional[str]]] = []
         for folder in sorted(p for p in root.iterdir() if p.is_dir() and p.name != "00"):
             children = [c for c in sorted(folder.iterdir()) if c.is_dir()]
-            if folder.name in PRESET_DIRS:
-                for child in children:
-                    datasets.append((child, folder.name))
-                continue
             if children and not has_direct_images(folder):
-                # Treat children as datasets; folder name is the preset/category
-                for child in children:
-                    datasets.append((child, folder.name))
+                # Treat the parent folder as a single dataset (merge children)
+                datasets.append((folder, None))
             else:
                 datasets.append((folder, None))
         return datasets
@@ -132,36 +131,71 @@ def run_selection(
         face_imgs = [p for p in all_images if any("face" in part.lower() for part in p.parts)]
         other_imgs = [p for p in all_images if p not in face_imgs]
 
+        def source_key(path: Path) -> str:
+            rel = path.relative_to(folder)
+            return rel.parts[0] if len(rel.parts) > 1 else "_root"
+
+        def group_by_source(paths: List[Path]) -> dict[str, List[Path]]:
+            grouped: dict[str, List[Path]] = {}
+            for p in paths:
+                grouped.setdefault(source_key(p), []).append(p)
+            return {k: sorted(v) for k, v in grouped.items()}
+
         chosen_pairs: List[Tuple[Path, np.ndarray]] = []
 
-        face_selected = select_diverse(face_imgs, limit=face_quota)
+        # Face selection
+        face_groups = group_by_source(face_imgs)
+        face_selected: List[Tuple[Path, np.ndarray]] = []
+        face_hashes: List[np.ndarray] = []
+        for paths in face_groups.values():
+            if len(face_selected) >= face_quota:
+                break
+            picked = select_diverse(paths, limit=1, seed_hashes=face_hashes, threshold=hamming_threshold, relaxed=hamming_relaxed)
+            face_selected.extend(picked)
+            face_hashes.extend([h for _, h in picked])
+        remaining_face = max(face_quota - len(face_selected), 0)
+        if remaining_face > 0:
+            all_faces_sorted = sorted(face_imgs)
+            extra_faces = select_diverse(all_faces_sorted, limit=remaining_face, seed_hashes=face_hashes, threshold=hamming_threshold, relaxed=hamming_relaxed)
+            face_selected.extend(extra_faces)
+            face_hashes.extend([h for _, h in extra_faces])
+        if len(face_selected) > face_quota:
+            face_selected = face_selected[:face_quota]
         chosen_pairs.extend(face_selected)
 
-        face_hashes = [h for _, h in face_selected]
+        # Non-face selection
         remaining = target_per_char - len(chosen_pairs)
-        # Split other images in three quadrants (start, middle, end) and sample each randomly
         if remaining > 0 and other_imgs:
-            sorted_other = sorted(other_imgs)
-            third = max(1, len(sorted_other) // 3)
-            quadrants = [
-                sorted_other[:third],
-                sorted_other[third:2 * third],
-                sorted_other[2 * third:],
-            ]
+            other_groups = group_by_source(other_imgs)
             current_hashes = list(face_hashes)
-            for quad in quadrants:
+            for paths in other_groups.values():
                 if remaining <= 0:
                     break
-                if not quad:
-                    continue
-                per_quad_limit = min(10, remaining)
-                sample = random.sample(quad, min(len(quad), per_quad_limit))
-                quad_selected = select_diverse(sample, limit=per_quad_limit, seed_hashes=current_hashes)
-                chosen_pairs.extend(quad_selected)
-                current_hashes.extend([h for _, h in quad_selected])
+                picked = select_diverse(paths, limit=1, seed_hashes=current_hashes, threshold=hamming_threshold, relaxed=hamming_relaxed)
+                chosen_pairs.extend(picked)
+                current_hashes.extend([h for _, h in picked])
                 remaining = target_per_char - len(chosen_pairs)
 
-        # If still short, pull whatever is left (no diversity checks)
+            if remaining > 0:
+                sorted_other = sorted(other_imgs)
+                third = max(1, len(sorted_other) // 3)
+                quadrants = [
+                    sorted_other[:third],
+                    sorted_other[third:2 * third],
+                    sorted_other[2 * third:],
+                ]
+                for quad in quadrants:
+                    if remaining <= 0:
+                        break
+                    if not quad:
+                        continue
+                    per_quad_limit = min(8, remaining)
+                    sample = random.sample(quad, min(len(quad), per_quad_limit))
+                    quad_selected = select_diverse(sample, limit=per_quad_limit, seed_hashes=current_hashes, threshold=hamming_threshold, relaxed=hamming_relaxed)
+                    chosen_pairs.extend(quad_selected)
+                    current_hashes.extend([h for _, h in quad_selected])
+                    remaining = target_per_char - len(chosen_pairs)
+
         if len(chosen_pairs) < target_per_char:
             missing = target_per_char - len(chosen_pairs)
             chosen_paths = {c[0] for c in chosen_pairs}
@@ -171,6 +205,9 @@ def run_selection(
                 chosen_pairs.append((p, np.array([])))
                 if len(chosen_pairs) >= target_per_char:
                     break
+
+        if len(chosen_pairs) > target_per_char:
+            chosen_pairs = chosen_pairs[:target_per_char]
 
         chosen = [p for p, _ in chosen_pairs]
         if not chosen:

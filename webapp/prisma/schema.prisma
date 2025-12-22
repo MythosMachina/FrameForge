@@ -35,3 +35,31 @@ model AutoCharPreset {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
+
+model Setting {
+  key        String   @id
+  value      String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model TaggerModel {
+  id         Int      @id @default(autoincrement())
+  repoId     String   @unique
+  name       String
+  folder     String
+  size       Int      @default(0)
+  status     String   @default("ready")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model StagedUpload {
+  id           Int      @id @default(autoincrement())
+  uploadId     String   @unique
+  originalName String
+  storedName   String
+  size         Int
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+}

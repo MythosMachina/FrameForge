@@ -5,19 +5,20 @@ from typing import Iterable
 
 # Bundle-local paths (aligned with workflow.py)
 BUNDLE_ROOT = Path(__file__).resolve().parent
-INPUT_ROOT = BUNDLE_ROOT / "10_input"
-FRAMES_ROOT = BUNDLE_ROOT / "20_capped_frames"
-WORKSPACE_ROOT = BUNDLE_ROOT / "30_work"
-READY_AUTOTAG = BUNDLE_ROOT / "50_ready_autotag"
-FINAL_OUTPUT = BUNDLE_ROOT / "60_final_output"
-ARCHIVE_MP4 = BUNDLE_ROOT / "70_archive_mp4"
-TRAIN_JOBS = BUNDLE_ROOT / "trainer" / "jobs"
-TRAIN_OUTPUT = BUNDLE_ROOT / "trainer" / "output"
+SYSTEM_ROOT = BUNDLE_ROOT / "_system"
+INPUT_ROOT = BUNDLE_ROOT / "INBOX"
+FRAMES_ROOT = SYSTEM_ROOT / "workflow" / "capped"
+WORKSPACE_ROOT = SYSTEM_ROOT / "workflow" / "work"
+READY_AUTOTAG = SYSTEM_ROOT / "workflow" / "ready"
+FINAL_OUTPUT = BUNDLE_ROOT / "OUTPUTS" / "datasets"
+ARCHIVE_MP4 = BUNDLE_ROOT / "ARCHIVE" / "mp4"
+TRAIN_JOBS = SYSTEM_ROOT / "trainer" / "jobs"
+TRAIN_OUTPUT = SYSTEM_ROOT / "trainer" / "output"
 TRAIN_MODELS = BUNDLE_ROOT / "trainer" / "models"
-TRAIN_LOGS = BUNDLE_ROOT / "trainer" / "logs"
-FINAL_LORA = BUNDLE_ROOT / "90_final_lora"
-TRAIN_FLAG = BUNDLE_ROOT / "TRAINING_RUNNING"
-TAG_FLAG = BUNDLE_ROOT / "TAGGING_RUNNING"
+TRAIN_LOGS = SYSTEM_ROOT / "trainer" / "logs"
+FINAL_LORA = BUNDLE_ROOT / "OUTPUTS" / "loras"
+TRAIN_FLAG = SYSTEM_ROOT / "flags" / "TRAINING_RUNNING"
+TAG_FLAG = SYSTEM_ROOT / "flags" / "TAGGING_RUNNING"
 
 
 def log(msg: str) -> None:
@@ -54,9 +55,9 @@ def remove_flags() -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prune FrameForge folders")
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--import", dest="clean_import", action="store_true", help="Clean 10_input")
-    group.add_argument("--work", dest="clean_work", action="store_true", help="Clean 30_work + 20_capped_frames")
-    group.add_argument("--output", dest="clean_output", action="store_true", help="Clean 60_final_output + 50_ready_autotag + 70_archive_mp4")
+    group.add_argument("--import", dest="clean_import", action="store_true", help="Clean INBOX")
+    group.add_argument("--work", dest="clean_work", action="store_true", help="Clean workflow work/capped/ready")
+    group.add_argument("--output", dest="clean_output", action="store_true", help="Clean OUTPUTS + ARCHIVE/mp4 + workflow ready")
     group.add_argument("--train", dest="clean_train", action="store_true", help="Clean trainer jobs/output/logs (keeps sample job)")
     group.add_argument("--all", dest="clean_all", action="store_true", help="Clean import, work, output, and training folders")
     return parser.parse_args()
@@ -66,7 +67,7 @@ def main() -> None:
     args = parse_args()
     if args.clean_all:
         # Clean 10_input but keep preset subfolders
-        log("Cleaning 10_input (preserving preset folders)")
+        log("Cleaning INBOX (preserving preset folders)")
         if INPUT_ROOT.exists():
             for child in INPUT_ROOT.iterdir():
                 if child.is_dir() and child.name in {"furry", "human", "dragon", "daemon"}:
@@ -96,7 +97,7 @@ def main() -> None:
         return
 
     if args.clean_import:
-        clean_group([INPUT_ROOT], "10_input")
+        clean_group([INPUT_ROOT], "INBOX")
     elif args.clean_work:
         clean_group([FRAMES_ROOT, WORKSPACE_ROOT], "work")
     elif args.clean_output:

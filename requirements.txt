@@ -1,8 +1,12 @@
 numpy
 Pillow
 torch
+torchvision
 transformers
 timm
 safetensors
 watchdog
 diffusers
+huggingface_hub
+opencv-python
+toml

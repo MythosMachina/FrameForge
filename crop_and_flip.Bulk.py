@@ -30,10 +30,7 @@ def process_image(src: Path, outdir: Path) -> None:
         crops = {
             "top_half":      (0, 0, w, h // 2),
             "bottom_half":   (0, h // 2, w, h),
-            "top_left":      (0, 0, w // 2, h // 2),
-            "top_right":     (w // 2, 0, w, h // 2),
-            "bottom_left":   (0, h // 2, w // 2, h),
-            "bottom_right":  (w // 2, h // 2, w, h),
+            "center":        ((w - min(w, h)) // 2, (h - min(w, h)) // 2, (w + min(w, h)) // 2, (h + min(w, h)) // 2),
         }
 
         for name, box in crops.items():

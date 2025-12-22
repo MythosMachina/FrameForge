@@ -17,6 +17,8 @@ from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform
 from torchvision import transforms
 
+from db_broker_client import broker_enabled, broker_query
+
 DEFAULT_MODEL_ID = "SmilingWolf/wd-eva02-large-tagger-v3"
 DEFAULT_GENERAL_THRESHOLD = 0.55
 DEFAULT_CHARACTER_THRESHOLD = 0.4
@@ -382,22 +384,29 @@ def load_txt_list(path: Path) -> List[str]:
 
 def load_autochar_lists(preset: Optional[str]) -> Tuple[List[str], List[str]]:
     """
-    Load autochar block/allow lists.
-    Priority:
-    - If RUN_DB is set and AutoCharPreset exists in DB:
-        - Use given preset name(s); if missing and preset=None, try 'default', then first row.
-        - Multiple presets allowed via comma-separated names.
-        - Patterns are JSON arrays in DB.
-    - Fallback to legacy files under autotag_presets/<preset>.block.txt/.allow.txt (or common.*).
-    - Always start with in-code defaults (AUTOCHAR_DEFAULT_PATTERNS / AUTOCHAR_ALLOWLIST).
+    Load autochar block/allow lists from the RUN_DB AutoCharPreset table only.
+    Multiple presets can be comma-separated; results are concatenated.
+    No local file fallbacks to keep the DB as single source of truth.
     """
-    block = list(AUTOCHAR_DEFAULT_PATTERNS)
-    allow = list(AUTOCHAR_ALLOWLIST)
+    block: List[str] = []
+    allow: List[str] = []
     db_path = os.environ.get("RUN_DB")
     names: List[str] = []
     if preset:
         names = [p.strip() for p in preset.split(",") if p.strip()]
-    # Try DB first
+    if broker_enabled():
+        try:
+            resp = broker_query("get_autochar_presets", {"names": names})
+            rows = resp.get("data") or []
+            if rows:
+                for row in rows:
+                    block += json.loads(row.get("block") or "[]")
+                    allow += json.loads(row.get("allow") or "[]")
+                    print(f"[info] Autochar preset from DB: {row.get('name')}")
+                return block, allow
+        except Exception as e:
+            print(f"[warn] Autochar preset broker lookup failed ({e}); no patterns applied")
+    # Only DB is authoritative
     if db_path and Path(db_path).exists():
         try:
             conn = sqlite3.connect(db_path)
@@ -423,28 +432,9 @@ def load_autochar_lists(preset: Optional[str]) -> Tuple[List[str], List[str]]:
                 return block, allow
             conn.close()
         except Exception as e:
-            print(f"[warn] Autochar preset DB lookup failed ({e}); falling back to files")
-    # Fallback to legacy files
-    common_block = AUTOCHAR_PRESETS_DIR / "common.block.txt"
-    common_allow = AUTOCHAR_PRESETS_DIR / "common.allow.txt"
-    block += load_txt_list(common_block)
-    allow += load_txt_list(common_allow)
-    if not preset:
-        return block, allow
-    preset_block = AUTOCHAR_PRESETS_DIR / f"{preset}.block.txt"
-    preset_allow = AUTOCHAR_PRESETS_DIR / f"{preset}.allow.txt"
-    loaded_block = load_txt_list(preset_block)
-    loaded_allow = load_txt_list(preset_allow)
-    if loaded_block:
-        block.extend(loaded_block)
-        print(f"[info] Autochar preset '{preset}': loaded +{len(loaded_block)} block patterns")
-    else:
-        print(f"[info] Autochar preset '{preset}': block list not found, using defaults only")
-    if loaded_allow:
-        allow.extend(loaded_allow)
-        print(f"[info] Autochar preset '{preset}': loaded +{len(loaded_allow)} allow patterns")
-    else:
-        print(f"[info] Autochar preset '{preset}': allow list not found, using defaults only")
+            print(f"[warn] Autochar preset DB lookup failed ({e}); no patterns applied")
+    if preset:
+        print(f"[warn] Autochar preset '{preset}' not found in DB; no patterns applied")
     return block, allow
 
 
@@ -620,43 +610,63 @@ def tag_folder(
     if not dataset_dirs:
         dataset_dirs = [root] if root.is_dir() else []
 
-    for ds in dataset_dirs:
-        preset_name = None
-        preset_marker = ds / ".autochar_preset"
-        if preset_marker.exists():
-            preset_name = preset_marker.read_text(encoding="utf-8").strip() or None
-        patterns = None
-        allow = None
-        if autochar_enabled:
-            if preset_name:
-                patterns, allow = load_autochar_lists(preset_name)
-            else:
-                patterns = autochar_patterns if autochar_patterns is not None else AUTOCHAR_DEFAULT_PATTERNS
-                allow = autochar_allow if autochar_allow is not None else AUTOCHAR_ALLOWLIST
-            print(f"[info] Autochar filtering enabled for {ds.name} ({len(patterns or [])} patterns, preset={preset_name or 'default'})")
+    # Centralize tag filtering: ignore config blacklist, rely on AutoChar presets/DB only
+    settings.blacklist = []
 
-        trigger = strip_run_prefix(ds.name).strip("_- ")
-        if not trigger:
-            trigger = ds.name
-        for image_path in iter_images(ds):
-            tag_line = predict_tags(
-                image_path=image_path,
-                labels=labels,
-                categories=categories,
-                model=model,
-                transform=transform,
-                general_threshold=settings.general_threshold,
-                character_threshold=settings.character_threshold,
-                max_tags=settings.max_tags,
-                blacklist=settings.blacklist,
-                device=device_obj,
-                trigger_tag=trigger,
-                verify_colors=verify_colors,
-            )
-            if patterns:
-                allow_patterns = list(allow or [])
-                if trigger:
-                    allow_patterns.append(re.escape(trigger))
-                tag_line = filter_tags(tag_line, patterns, allowlist=allow_patterns)
-            out_path = image_path.with_suffix(".txt")
-            out_path.write_text(tag_line, encoding="utf-8")
+    try:
+        for ds in dataset_dirs:
+            preset_name = None
+            env_preset = os.environ.get("AUTOCHAR_PRESET", "").strip()
+            preset_marker = ds / ".autochar_preset"
+            # Prefer explicit env (webapp/CLI) over folder markers to keep DB presets authoritative
+            if env_preset:
+                preset_name = env_preset
+            elif preset_marker.exists():
+                preset_name = preset_marker.read_text(encoding="utf-8").strip() or None
+            patterns = None
+            allow = None
+            if autochar_enabled and preset_name:
+                patterns, allow = load_autochar_lists(preset_name)
+                print(f"[info] Autochar filtering enabled for {ds.name} ({len(patterns or [])} patterns, preset={preset_name})")
+
+            trigger = strip_run_prefix(ds.name).strip("_- ")
+            if not trigger:
+                trigger = ds.name
+            for image_path in iter_images(ds):
+                tag_line = predict_tags(
+                    image_path=image_path,
+                    labels=labels,
+                    categories=categories,
+                    model=model,
+                    transform=transform,
+                    general_threshold=settings.general_threshold,
+                    character_threshold=settings.character_threshold,
+                    max_tags=settings.max_tags,
+                    blacklist=settings.blacklist,
+                    device=device_obj,
+                    trigger_tag=trigger,
+                    verify_colors=verify_colors,
+                )
+                if patterns:
+                    allow_patterns = list(allow or [])
+                    if trigger:
+                        allow_patterns.append(re.escape(trigger))
+                    tag_line = filter_tags(tag_line, patterns, allowlist=allow_patterns)
+                out_path = image_path.with_suffix(".txt")
+                out_path.write_text(tag_line, encoding="utf-8")
+    finally:
+        # Release GPU memory after autotag to avoid lingering CUDA usage
+        try:
+            if model is not None:
+                del model
+            if categories is not None:
+                del categories
+            if labels is not None:
+                del labels
+            if transform is not None:
+                del transform
+            if device_obj and device_obj.type == "cuda":
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+        except Exception:
+            pass
