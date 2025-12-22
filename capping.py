@@ -9,13 +9,13 @@ from PIL import Image
 
 # Configuration for frame extraction
 VIDEO_EXTS = {".mp4", ".mov", ".mkv"}
-FPS = 12  # export 12 frames per second
+FPS = 8  # export 8 frames per second to reduce duplicates and keep outputs lean
 JPEG_QUALITY = 2  # lower is better quality for ffmpeg qscale (2 is near-lossless)
 FACE_SAMPLE_STRIDE = 3  # analyze every Nth frame for face crops
 MAX_FACE_CROPS = 200  # per video cap to avoid explosion
 FACE_PAD_RATIO = 0.2  # 20% padding around detected box
 FACE_MODEL_URL = "https://github.com/YapaLab/yolo-face/releases/download/v0.0.0/yolov12n-face.pt"
-FACE_MODEL_PATH = Path(__file__).resolve().parent / "models_import" / "yolov12n-face.pt"
+FACE_MODEL_PATH = Path(__file__).resolve().parent / "_system" / "models" / "face" / "yolov12n-face.pt"
 
 
 @dataclass
@@ -33,7 +33,7 @@ def iter_videos(root: Path) -> Iterable[Path]:
             yield path
 
 
-def cap_video(src: Path, out_dir: Path) -> None:
+def cap_video(src: Path, out_dir: Path, fps: int = FPS, jpeg_quality: int = JPEG_QUALITY) -> None:
     """
     Export frames from a single video to out_dir using ffmpeg.
     Skips work if out_dir already has files.
@@ -51,9 +51,9 @@ def cap_video(src: Path, out_dir: Path) -> None:
         "-i",
         str(src),
         "-vf",
-        f"fps={FPS}",
+        f"fps={fps}",
         "-qscale:v",
-        str(JPEG_QUALITY),
+        str(jpeg_quality),
         str(output_pattern),
     ]
     print(f"[cap ] {src} -> {out_dir}")
@@ -148,6 +148,8 @@ def cap_all(
     source_root: Path,
     capping_root: Path,
     facecap: bool = False,
+    fps: int = FPS,
+    jpeg_quality: int = JPEG_QUALITY,
 ) -> List[Path]:
     """
     Cap all videos under source_root into capping_root, mirroring the folder structure.
@@ -158,7 +160,7 @@ def cap_all(
     for video in sorted(iter_videos(source_root)):
         rel_parent = video.parent.relative_to(source_root)
         out_dir = capping_root / rel_parent / video.stem
-        cap_video(video, out_dir)
+        cap_video(video, out_dir, fps=fps, jpeg_quality=jpeg_quality)
         if facecap:
             crops = crop_faces(detector, out_dir)
             if crops:

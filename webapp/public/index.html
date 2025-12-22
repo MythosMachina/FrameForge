@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FrameForge Control</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -23,11 +24,13 @@
         <a href="#queue">Dashboard</a>
         <a href="#upload">Upload</a>
         <a href="#autochar">AutoChar</a>
+        <a href="#docs">Documentation</a>
         <a href="#settings">Settings</a>
+        <a href="#system">System Status</a>
       </nav>
-      <div class="status-pill">
-        <span class="dot dot-green"></span> Orchestrator Ready
-      </div>
+      <button class="status-pill" id="system-status-pill" onclick="location.hash='#system'">
+        <span class="dot dot-green"></span> <span class="orch-label">System</span>
+      </button>
     </header>
 
     <main>
@@ -66,30 +69,100 @@
             <label class="field file-column">
             <span>Dataset ZIP</span>
             <div class="file-drop tall">
-              <input type="file" name="zip" accept=".zip" multiple required>
+              <input type="file" name="zip" accept=".zip" multiple>
               <p>Drag & drop or click to select (multiple allowed)</p>
               <div class="file-name" id="selected-file"></div>
             </div>
           </label>
+          <div class="staged-block">
+            <div class="staged-head">
+              <span>Staged files</span>
+              <span class="info" data-tip="Files upload immediately and stay staged for 5 minutes. Click Launch to create jobs.">i</span>
+            </div>
+            <div id="staged-list" class="staged-list">
+              <div class="hint">Drop ZIPs to start staging. Staged items will appear here.</div>
+            </div>
+          </div>
           </div>
           <div class="form upload-right">
-          <div class="field toggles">
-            <label><input type="checkbox" name="autotag" checked> autotag</label>
-            <label><input type="checkbox" name="autochar" checked> autochar</label>
-            <label><input type="checkbox" name="facecap"> facecap</label>
-            <label><input type="checkbox" name="train"> train</label>
-            <label class="gpu-toggle"><input type="checkbox" name="gpu" checked> use GPU when available</label>
+          <div class="toggle-groups">
+            <div class="toggle-group">
+              <div class="group-head">
+                <span>Tagging</span>
+                <span class="info" data-tip="Controls tagging and cleanup stages.">i</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" name="manualTagging">
+                <span>manual tagging</span>
+                <span class="info" data-tip="Pause after crop/flip so tags can be edited manually. Autotag/autochar will be skipped.">i</span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" name="autotag" checked>
+                <span>autotag</span>
+                <span class="info" data-tip="Generate tags for each image with the selected model.">i</span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" name="autochar" checked>
+                <span>autochar</span>
+                <span class="info" data-tip="Remove unwanted tags using the AutoChar preset(s) you select. Runs after autotag.">i</span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" name="tagverify">
+                <span>tagverify</span>
+                <span class="info" data-tip="Optional color check: drops color tags that fail an HSV mask test. Use with autotag.">i</span>
+              </label>
+            </div>
+            <div class="toggle-group">
+              <div class="group-head">
+                <span>Input & Processing</span>
+                <span class="info" data-tip="Pre-processing for incoming media.">i</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" name="facecap">
+                <span>facecap</span>
+                <span class="info" data-tip="While capping videos, detect faces and save crops to boost face coverage.">i</span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" name="imagesOnly">
+                <span>images only</span>
+                <span class="info" data-tip="Skip video capping/archive; treat input as already-capped images.">i</span>
+              </label>
+            </div>
+            <div class="toggle-group">
+              <div class="group-head">
+                <span>Training & Performance</span>
+                <span class="info" data-tip="GPU usage and optional LoRA training.">i</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" name="train">
+                <span>train <span class="pill">Early Access</span></span>
+                <span class="info" data-tip="Plan and run LoRA training on the finished dataset (GPU required).">i</span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" name="gpu" checked>
+                <span>use GPU when available</span>
+                <span class="info" data-tip="Accelerate autotagging with CUDA if present. Training always uses GPU.">i</span>
+              </label>
+              <label class="field">
+                <span>Train profile</span>
+                <select name="trainProfile" id="train-profile">
+                  <option value="">loading...</option>
+                </select>
+                <span class="info" data-tip="Choose the training recipe applied to LoRA runs. Balanced = mid quality/speed; Fast = legacy quicker setup.">i</span>
+              </label>
+            </div>
           </div>
           <label class="field">
             <span>AutoChar presets (multi-select)</span>
             <select name="autocharPresets" id="autochar-presets" multiple size="5">
+              <option value="">(no preset)</option>
               <option value="human">human</option>
               <option value="furry">furry</option>
               <option value="dragon">dragon</option>
               <option value="daemon">daemon</option>
               <option value="default">default</option>
             </select>
-            <div class="hint">Leave empty to apply only the default rules.</div>
+            <div class="hint">Leave empty to apply no preset; only TagVerify (if enabled) will adjust tags.</div>
           </label>
           <div class="field">
             <span>Notes / tags</span>
@@ -104,23 +177,99 @@
         </form>
       </section>
 
+      <section data-section="manual" class="panel hidden">
+        <header class="panel-header">
+          <h2>Manual Tagging</h2>
+          <p class="muted">Edit tags per image, apply bulk updates, then resume the pipeline.</p>
+        </header>
+        <div class="manual-toolbar">
+          <div class="manual-controls">
+            <label class="field">
+              <span>Search</span>
+              <input type="text" id="manual-search" placeholder="Search filename or tags">
+            </label>
+            <label class="inline">
+              <input type="checkbox" id="manual-face-only">
+              <span>face only</span>
+            </label>
+          </div>
+          <div class="manual-bulk">
+            <label class="field">
+              <span>Add tags</span>
+              <input type="text" id="manual-bulk-add" placeholder="tag1, tag2">
+            </label>
+            <label class="field">
+              <span>Remove tags</span>
+              <input type="text" id="manual-bulk-remove" placeholder="tag1, tag2">
+            </label>
+            <div class="actions">
+              <button class="btn secondary" id="manual-apply-add">Apply add</button>
+              <button class="btn secondary" id="manual-apply-remove">Apply remove</button>
+            </div>
+          </div>
+          <div class="actions manual-actions">
+            <button class="btn secondary" id="manual-save">Save changes</button>
+            <button class="btn primary" id="manual-resume">Resume pipeline</button>
+            <button class="btn ghost" id="manual-back">Back to queue</button>
+            <div class="status-msg" id="manual-msg"></div>
+          </div>
+        </div>
+        <div class="manual-tags">
+          <div class="manual-tags-head">
+            <div>
+              <h3>Tag overview</h3>
+              <p class="muted small">Click tags to select, then remove across the dataset.</p>
+            </div>
+            <label class="field" style="margin-left:auto; min-width: 220px;">
+              <span>Filter tags</span>
+              <input type="text" id="manual-tags-filter" placeholder="type to filter">
+            </label>
+            <div class="actions">
+              <button class="btn secondary" id="manual-tags-remove">Remove selected</button>
+              <button class="btn ghost" id="manual-tags-refresh">Refresh</button>
+            </div>
+          </div>
+          <div class="manual-tags-list" id="manual-tags-list"></div>
+        </div>
+        <div class="manual-grid" id="manual-grid"></div>
+        <div class="actions" style="margin-top: 10px;">
+          <button class="btn ghost" id="manual-load-more">Load more</button>
+        </div>
+      </section>
+
+      <section data-section="system" class="panel hidden">
+        <header class="panel-header">
+          <h2>System Status</h2>
+          <p class="muted">Live state of WebApp, Initiator, Orchestrator, Finisher</p>
+        </header>
+        <div id="system-status-list" class="status-grid"></div>
+      </section>
+
       <section data-section="queue" class="panel hidden">
         <div class="panel-header">
           <h2>Dashboard</h2>
-          <p>Live queue and recent history at a glance.</p>
+          <p>Live queue, active work, and recent history at a glance.</p>
         </div>
-        <div class="grid-2">
+        <div class="grid-3" id="dashboard-columns">
           <div>
             <h3 class="subhead">Queue</h3>
             <div class="cards" id="queue-list">
               <div class="empty">
-                <p>No active runs. Submit a dataset to start the pipeline.</p>
+                <p>No queued runs. Submit a dataset to start the pipeline.</p>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h3 class="subhead">In Progress</h3>
+            <div class="cards" id="active-list">
+              <div class="empty">
+                <p>No active runs. Queue a dataset to begin.</p>
               </div>
             </div>
           </div>
           <div>
             <h3 class="subhead">History</h3>
-            <div class="grid-3" id="history-list">
+            <div class="cards" id="history-list">
               <div class="card empty">
                 <p>No finished datasets yet. Completed runs will appear here with download links.</p>
               </div>
@@ -129,28 +278,204 @@
         </div>
       </section>
 
-      <section data-section="settings" class="panel grid-2 hidden">
+      <section data-section="settings" class="panel hidden">
         <div class="panel-header">
-          <h2>Settings</h2>
-          <p>Control concurrency, cleanup, and GPU preference.</p>
+          <div class="settings-tabs">
+            <button class="tab active" data-tab="settings-main">Settings</button>
+            <button class="tab" data-tab="settings-tagger">Tagger Model Changer</button>
+            <button class="tab" data-tab="settings-trainer">Trainer</button>
+          </div>
+          <p>Pipeline knobs (stored in DB). Applied on next run; Launch uses current values.</p>
         </div>
-        <div class="form compact">
-          <label class="field inline">
-            <span>Max parallel runs</span>
-            <input type="number" value="2" min="1" max="8">
-          </label>
-          <label class="field inline">
-            <span>Auto-clean after run</span>
-            <input type="checkbox" checked>
-          </label>
-          <label class="field inline">
-            <span>Default GPU usage</span>
-            <select>
-              <option>Prefer GPU</option>
-              <option>GPU only</option>
-              <option>CPU only</option>
-            </select>
-          </label>
+        <div class="settings-tab" data-tab-panel="settings-main">
+          <div class="queue-control">
+            <div class="queue-meta">
+              <div>
+                <div class="name">Queue Mode</div>
+                <div class="muted small">Start/Pause/Stop orchestrator processing.</div>
+              </div>
+              <div class="pill" id="queue-mode">–</div>
+            </div>
+            <div class="muted small" id="queue-status-text">status: unknown</div>
+            <div class="muted small">Active run: <span id="queue-active">–</span></div>
+            <div class="queue-actions">
+              <button class="btn" id="queue-start">Start</button>
+              <button class="btn" id="queue-pause">Pause</button>
+              <button class="btn" id="queue-stop">Stop</button>
+              <button class="btn" id="queue-restart">Restart</button>
+              <button class="btn" id="queue-refresh">Refresh</button>
+            </div>
+            <div class="status-msg" id="queue-msg"></div>
+          </div>
+          <div class="settings-grid">
+            <div class="setting-group">
+              <div class="group-head">
+                <span>Capping</span>
+                <span class="info" data-tip="Controls frame extraction from videos.">i</span>
+              </div>
+              <label class="setting-row">
+                <div>
+                  <div class="name">FPS</div>
+                  <div class="muted small">Frames per second during capping.</div>
+                </div>
+                <input type="number" id="setting-capping_fps" min="1" max="60" step="1">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">JPEG quality</div>
+                  <div class="muted small">ffmpeg qscale (2 = near-lossless, lower is higher quality).</div>
+                </div>
+                <input type="number" id="setting-capping_jpeg_quality" min="1" max="31" step="1">
+              </label>
+            </div>
+            <div class="setting-group">
+              <div class="group-head">
+                <span>Selection</span>
+                <span class="info" data-tip="How frames are picked before cropping.">i</span>
+              </div>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Target per character</div>
+                  <div class="muted small">Max selected before cropping (final cap still applies).</div>
+                </div>
+                <input type="number" id="setting-selection_target_per_character" min="1" max="100" step="1">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Face quota</div>
+                  <div class="muted small">Target count of face-close shots within the 40 picks.</div>
+                </div>
+                <input type="number" id="setting-selection_face_quota" min="0" max="40" step="1">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Hamming threshold</div>
+                  <div class="muted small">Minimum pHash distance for diversity (primary).</div>
+                </div>
+                <input type="number" id="setting-selection_hamming_threshold" min="1" max="64" step="1">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Hamming relaxed</div>
+                  <div class="muted small">Fallback pHash distance if not enough picks.</div>
+                </div>
+                <input type="number" id="setting-selection_hamming_relaxed" min="1" max="64" step="1">
+              </label>
+            </div>
+            <div class="setting-group">
+              <div class="group-head">
+                <span>Autotag</span>
+                <span class="info" data-tip="Default thresholds when not overridden per run.">i</span>
+              </div>
+              <label class="setting-row">
+                <div>
+                  <div class="name">General threshold</div>
+                  <div class="muted small">Score cutoff for general tags.</div>
+                </div>
+                <input type="number" id="setting-autotag_general_threshold" min="0" max="1" step="0.01">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Character threshold</div>
+                  <div class="muted small">Score cutoff for character tags.</div>
+                </div>
+                <input type="number" id="setting-autotag_character_threshold" min="0" max="1" step="0.01">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Max tags</div>
+                  <div class="muted small">Maximum tags per image (including trigger).</div>
+                </div>
+                <input type="number" id="setting-autotag_max_tags" min="1" max="100" step="1">
+              </label>
+            </div>
+            <div class="setting-group">
+              <div class="group-head">
+                <span>Output</span>
+                <span class="info" data-tip="Final caps on produced images.">i</span>
+              </div>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Max images per set</div>
+                  <div class="muted small">After crop/flip, trim to this count; overflow moves to <code>_overflow</code>.</div>
+                </div>
+                <input type="number" id="setting-output_max_images" min="50" max="2000" step="10">
+              </label>
+            </div>
+          </div>
+          <div class="actions" style="margin-top: 12px;">
+            <button class="btn primary" id="settings-save">Save Settings</button>
+            <button class="btn danger" id="settings-prune">Prune Workdirs</button>
+            <div class="status-msg" id="settings-msg"></div>
+            <div class="hint">Prune clears work/staging/final folders and jobs. Not reversible.</div>
+          </div>
+        </div>
+        <div class="settings-tab hidden" data-tab-panel="settings-tagger">
+          <div class="setting-group">
+            <div class="group-head">
+              <span>Hugging Face</span>
+              <span class="info" data-tip="Token is stored in DB and used for model downloads.">i</span>
+            </div>
+            <label class="setting-row">
+              <div>
+                <div class="name">HF token</div>
+                <div class="muted small">Needed for private models or higher rate limits.</div>
+              </div>
+              <input type="password" id="setting-hf_token" placeholder="hf_...">
+            </label>
+          </div>
+          <div class="setting-group">
+            <div class="group-head">
+              <span>Download / Switch model</span>
+              <span class="info" data-tip="Provide a repo id or full HF link. Downloads config, tags, and weights.">i</span>
+            </div>
+            <label class="field">
+              <span>Repo ID or link</span>
+              <input type="text" id="tagger-repo-id" placeholder="e.g. SmilingWolf/wd-eva02-large-tagger-v3">
+            </label>
+            <div class="actions">
+              <button class="btn primary" id="tagger-download">Download / Refresh</button>
+              <div class="status-msg" id="tagger-msg"></div>
+            </div>
+          </div>
+          <div class="setting-group">
+            <div class="group-head">
+              <span>Local models</span>
+              <span class="info" data-tip="Models stored under storage/tagger_models.">i</span>
+            </div>
+            <p class="muted small">Current default: <span id="tagger-default">unknown</span></p>
+            <div id="tagger-model-list" class="cards"></div>
+          </div>
+        </div>
+      </section>
+
+      <section data-section="docs" class="panel hidden">
+        <div class="panel-header">
+          <h2>Documentation</h2>
+          <p>FrameForge handbook embedded for quick reference. All features, flows, and FAQs in one place.</p>
+        </div>
+        <div class="docs-layout">
+          <aside class="docs-nav">
+            <div class="docs-nav-title">Pages</div>
+            <a href="#docs-overview" data-doc-target="overview" class="active">Overview</a>
+            <a href="#docs-quickstart" data-doc-target="quickstart">Quickstart</a>
+            <a href="#docs-orchestrators" data-doc-target="orchestrators">Orchestrators</a>
+            <a href="#docs-ui" data-doc-target="ui">Web UI</a>
+            <a href="#docs-autochar" data-doc-target="autochar">AutoChar</a>
+            <a href="#docs-workflow" data-doc-target="workflow">Workflow</a>
+            <a href="#docs-layout" data-doc-target="layout">Folders</a>
+            <a href="#docs-env" data-doc-target="env">Environment & Services</a>
+            <a href="#docs-gpu" data-doc-target="gpu">GPU & Training</a>
+            <a href="#docs-status" data-doc-target="status">Status & Colors</a>
+            <a href="#docs-clean" data-doc-target="clean">Cleaning</a>
+            <a href="#docs-api" data-doc-target="api">API</a>
+            <a href="#docs-faq" data-doc-target="faq">FAQ</a>
+          </aside>
+          <div class="docs-pages">
+            <div class="docs-page" id="docs-content">
+              <p class="muted">Loading documentation...</p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -194,3 +519,115 @@
   <script src="/app.js"></script>
 </body>
 </html>
+
+
+        <div class="settings-tab hidden" data-tab-panel="settings-trainer">
+          <div class="settings-grid">
+            <div class="setting-group">
+              <div class="group-head">
+                <span>Trainer (SDXL LoRA)</span>
+                <span class="info" data-tip="Trainer hyperparameters (from DB).">i</span>
+              </div>
+              <label class="setting-row">
+                <div><div class="name">Base model</div></div>
+                <input type="text" id="setting-trainer_base_model">
+              </label>
+              <label class="setting-row">
+                <div><div class="name">VAE</div></div>
+                <input type="text" id="setting-trainer_vae">
+              </label>
+              <label class="setting-row">
+                <div><div class="name">Resolution</div></div>
+                <input type="number" id="setting-trainer_resolution" min="512" max="1536" step="64">
+              </label>
+              <label class="setting-row">
+                <div><div class="name">Batch size</div></div>
+                <input type="number" id="setting-trainer_batch_size" min="1" max="8" step="1">
+              </label>
+              <label class="setting-row">
+                <div><div class="name">Grad accum</div></div>
+                <input type="number" id="setting-trainer_grad_accum" min="1" max="16" step="1">
+              </label>
+              <label class="setting-row">
+                <div><div class="name">Epochs</div></div>
+                <input type="number" id="setting-trainer_epochs" min="1" max="200" step="1">
+              </label>
+              <label class="setting-row">
+                <div><div class="name">Max steps</div></div>
+                <input type="number" id="setting-trainer_max_train_steps" min="0" step="100">
+              </label>
+              <label class="setting-row">
+                <div><div class="name">LR / TE LR</div></div>
+                <input type="number" id="setting-trainer_learning_rate" step="0.00001">
+                <input type="number" id="setting-trainer_te_learning_rate" step="0.00001">
+              </label>
+              <label class="setting-row">
+                <div><div class="name">Scheduler</div></div>
+                <select id="setting-trainer_lr_scheduler">
+                  <option value="cosine">cosine</option>
+                  <option value="constant">constant</option>
+                </select>
+              </label>
+              <label class="setting-row">
+                <div><div class="name">Warmup steps</div></div>
+                <input type="number" id="setting-trainer_lr_warmup_steps" min="0" step="10">
+              </label>
+              <label class="setting-row">
+                <div><div class="name">Ranks (UNet / TE)</div></div>
+                <input type="number" id="setting-trainer_lora_rank" min="1" max="128" step="1">
+                <input type="number" id="setting-trainer_te_lora_rank" min="1" max="128" step="1">
+              </label>
+              <label class="setting-row">
+                <div><div class="name">Clip skip</div></div>
+                <input type="number" id="setting-trainer_clip_skip" min="1" max="4" step="1">
+              </label>
+              <label class="setting-row">
+                <div><div class="name">Min SNR / Noise offset</div></div>
+                <input type="number" id="setting-trainer_min_snr_gamma" step="0.1">
+                <input type="number" id="setting-trainer_noise_offset" step="0.001">
+              </label>
+              <label class="setting-row">
+                <div><div class="name">Weight decay</div></div>
+                <input type="number" id="setting-trainer_weight_decay" step="0.001">
+              </label>
+              <label class="setting-row">
+                <div><div class="name">Buckets (min / max / step)</div></div>
+                <input type="number" id="setting-trainer_bucket_min_reso" step="16">
+                <input type="number" id="setting-trainer_bucket_max_reso" step="16">
+                <input type="number" id="setting-trainer_bucket_step" step="16">
+              </label>
+              <label class="setting-row">
+                <div><div class="name">Caption options</div></div>
+                <label class="inline"><input type="checkbox" id="setting-trainer_shuffle_caption"> shuffle</label>
+                <div class="muted small">Keep tokens</div>
+                <input type="number" id="setting-trainer_keep_tokens" min="0" max="10" step="1">
+                <div class="muted small">Caption dropout</div>
+                <input type="number" id="setting-trainer_caption_dropout" step="0.01" min="0" max="1">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Sample prompts</div>
+                  <div class="muted small">Trigger is prepended automatically.</div>
+                </div>
+                <input type="text" id="setting-trainer_sample_prompt_1" placeholder="front view">
+                <input type="text" id="setting-trainer_sample_prompt_2" placeholder="face close up">
+                <input type="text" id="setting-trainer_sample_prompt_3" placeholder="sitting, smile">
+              </label>
+              <label class="setting-row">
+                <div><div class="name">Network dropout</div></div>
+                <input type="number" id="setting-trainer_network_dropout" step="0.01" min="0" max="1">
+              </label>
+              <label class="setting-row">
+                <div><div class="name">Optimizer</div></div>
+                <input type="text" id="setting-trainer_optimizer">
+                <label class="inline"><input type="checkbox" id="setting-trainer_use_8bit_adam"> use 8bit Adam</label>
+                <label class="inline"><input type="checkbox" id="setting-trainer_use_prodigy"> use Prodigy</label>
+              </label>
+              <label class="setting-row">
+                <div><div class="name">Grad checkpoint / Max grad norm</div></div>
+                <label class="inline"><input type="checkbox" id="setting-trainer_gradient_checkpointing"> grad checkpoint</label>
+                <input type="number" id="setting-trainer_max_grad_norm" step="0.1" min="0">
+              </label>
+            </div>
+          </div>
+        </div>
