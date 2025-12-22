@@ -1045,6 +1045,12 @@ app.post('/api/tagger-models/download', async (req, res) => {
     const modelId = String(repoId).trim();
     const safeName = sanitizeName(modelId.replace(/[\\/]/g, '-'));
     const dest = path.join(TAGGER_MODELS_DIR, safeName);
+    await dbExec(
+      "INSERT INTO TaggerModel (repoId, name, folder, size, status, createdAt, updatedAt) " +
+        "VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) " +
+        "ON CONFLICT(repoId) DO UPDATE SET name=excluded.name, folder=excluded.folder, size=excluded.size, status=excluded.status, updatedAt=CURRENT_TIMESTAMP;",
+      [modelId, safeName, dest, 0, 'installing']
+    );
     await fs.promises.rm(dest, { recursive: true, force: true });
     await fs.promises.mkdir(dest, { recursive: true });
     const settings = await getSettingsMap();
@@ -1066,6 +1072,17 @@ app.post('/api/tagger-models/download', async (req, res) => {
     res.json({ ok: true, model: record });
   } catch (err) {
     console.error('[tagger:download] failed', err);
+    try {
+      const modelId = String(req.body?.repoId || '').trim();
+      if (modelId) {
+        await dbExec(
+          "UPDATE TaggerModel SET status=?, size=?, updatedAt=CURRENT_TIMESTAMP WHERE repoId=?",
+          ['missing', 0, modelId]
+        );
+      }
+    } catch (_err) {
+      // ignore
+    }
     res.status(500).json({ error: err.message || 'download failed' });
   }
 });

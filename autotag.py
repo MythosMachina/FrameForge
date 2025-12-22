@@ -26,7 +26,6 @@ COLOR_TERMS = (
     "blue", "red", "green", "purple", "pink", "orange", "yellow",
     "gold", "brown", "black", "white", "gray", "grey", "silver",
 )
-COLOR_MIN_THRESHOLD = 0.7
 COLOR_PIXEL_FRACTION = 0.03  # minimum fraction of image that must show a color for tag verification
 COLOR_CANONICAL = {
     "blue": "blue",
@@ -353,11 +352,37 @@ def load_labels_and_model(
     model.eval()
 
     data_cfg = resolve_data_config(model=model, use_test_size=False)
-    # override with provided mean/std/size if present
+    # override with provided mean/std if present; validate input_size against model
     pretrained_cfg = cfg.get("pretrained_cfg", {})
     mean = pretrained_cfg.get("mean", data_cfg["mean"])
     std = pretrained_cfg.get("std", data_cfg["std"])
-    input_size = pretrained_cfg.get("input_size", data_cfg["input_size"])
+
+    def _normalize_input_size(val: object) -> Optional[Tuple[int, int, int]]:
+        if isinstance(val, (list, tuple)) and len(val) == 3:
+            return tuple(int(x) for x in val)  # type: ignore[return-value]
+        return None
+
+    def _model_input_size() -> Tuple[int, int, int]:
+        default_cfg = getattr(model, "default_cfg", None) or getattr(model, "pretrained_cfg", None) or {}
+        cfg_input = _normalize_input_size(default_cfg.get("input_size"))
+        if cfg_input:
+            return cfg_input
+        img_size = getattr(model, "img_size", None)
+        if img_size is not None:
+            if isinstance(img_size, (list, tuple)) and len(img_size) == 2:
+                return (3, int(img_size[0]), int(img_size[1]))
+            return (3, int(img_size), int(img_size))
+        patch = getattr(model, "patch_embed", None)
+        patch_size = getattr(patch, "img_size", None) if patch is not None else None
+        if patch_size is not None:
+            if isinstance(patch_size, (list, tuple)) and len(patch_size) == 2:
+                return (3, int(patch_size[0]), int(patch_size[1]))
+            return (3, int(patch_size), int(patch_size))
+        return data_cfg["input_size"]
+
+    expected_input = _model_input_size()
+    cfg_input = _normalize_input_size(pretrained_cfg.get("input_size"))
+    input_size = cfg_input if cfg_input == expected_input else expected_input
     transform = create_transform(
         input_size=tuple(input_size),
         mean=mean,
@@ -520,10 +545,7 @@ def predict_tags(
             continue  # skip ratings
         clean_name = name.replace("_", " ")
         lower_name = clean_name.lower()
-        is_color = any(term in lower_name for term in COLOR_TERMS)
         threshold = character_threshold if category == CHARACTER_CATEGORY else general_threshold
-        if is_color:
-            threshold = max(threshold, COLOR_MIN_THRESHOLD)
         if prob < threshold:
             continue
         tags.append((prob, clean_name))

@@ -429,6 +429,27 @@
               <span>Download / Switch model</span>
               <span class="info" data-tip="Provide a repo id or full HF link. Downloads config, tags, and weights.">i</span>
             </div>
+            <label class="setting-row">
+              <div>
+                <div class="name">Quick picks</div>
+                <div class="muted small">Choose a curated tagger by style.</div>
+              </div>
+              <select id="tagger-preset">
+                <option value="">Select a model...</option>
+                <optgroup label="General">
+                  <option value="SmilingWolf/wd-eva02-large-tagger-v3">EVA02 Large (default)</option>
+                </optgroup>
+                <optgroup label="Anime">
+                  <option value="SmilingWolf/wd-swinv2-tagger-v3">SwinV2 (anime-leaning)</option>
+                  <option value="SmilingWolf/wd-convnext-tagger-v3">ConvNeXt (anime-leaning)</option>
+                </optgroup>
+                <optgroup label="Realistic">
+                  <option value="SmilingWolf/wd-swinv2-tagger-v3">SwinV2 (realistic)</option>
+                  <option value="SmilingWolf/wd-convnext-tagger-v3">ConvNeXt (realistic)</option>
+                </optgroup>
+              </select>
+            </label>
+            <div class="muted small" id="tagger-preset-status"></div>
             <label class="field">
               <span>Repo ID or link</span>
               <input type="text" id="tagger-repo-id" placeholder="e.g. SmilingWolf/wd-eva02-large-tagger-v3">

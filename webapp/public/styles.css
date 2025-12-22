@@ -195,9 +195,14 @@ main { margin-top: 26px; display: flex; flex-direction: column; gap: 20px; }
   flex-direction: column;
   gap: 6px;
 }
-.model .meta { color: var(--muted); font-size: 12px; }
+.model .meta { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 8px; }
 .model .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .model .badge { font-size: 11px; }
+.tagger-status { font-size: 11px; text-transform: uppercase; }
+.tagger-ready { background: rgba(91,216,143,0.12); color: var(--success); border-color: rgba(91,216,143,0.5); }
+.tagger-installing { background: rgba(213,140,63,0.16); color: var(--accent); border-color: rgba(213,140,63,0.5); }
+.tagger-missing { background: rgba(255,255,255,0.06); color: var(--muted); }
+.tagger-unknown { background: rgba(217,75,75,0.14); color: var(--danger); border-color: rgba(217,75,75,0.5); }
 .btn.danger {
   background: rgba(217,75,75,0.12);
   border-color: rgba(217,75,75,0.5);
