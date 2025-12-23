@@ -10,8 +10,5 @@
   "character_threshold": 0.4,
   "max_tags": 15,
   "blacklist": [
-    "colored skin",
-    "purple skin",
-    "blue skin"
   ]
 }
