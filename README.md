@@ -3,6 +3,9 @@
 ## Overview
 FrameForge is a full, pipeline-driven training application with three orchestrators. It turns ZIP uploads into clean, tagged image datasets, can train LoRAs, and packages downloads automatically. A web UI is included for non-technical users, with optional CLI workflows for power users.
 
+„FrameForge is designed for fictional, stylized, and synthetic content.
+Use on real individuals without consent is explicitly discouraged.“
+
 ## Highlights
 - End-to-end pipeline: import → select → crop → tag → (optional) train → package.
 - Orchestrated services: initiator, orchestrator, finisher.
