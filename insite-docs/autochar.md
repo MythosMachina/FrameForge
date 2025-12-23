@@ -25,6 +25,7 @@ Examples:
 - `@colors:hair` removes all color hair tags (e.g., `blonde_hair`, `blue_hair`).
 - `@colors:eyes` removes all color eye tags.
 - `@colors:fur` removes all color fur tags.
+- `@colors:skin`, `@colors:tail`, `@colors:ears`, `@colors:wings`, `@colors:scales` are also supported.
 
 Macro sources:
 - `preset/macros/colors.json`
