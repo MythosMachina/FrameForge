@@ -10,7 +10,7 @@
     "setup": "npm install && npm run db:generate && npm run db:push"
   },
   "dependencies": {
-    "archiver": "^6.0.2",
+    "archiver": "^7.0.1",
     "express": "^4.19.2",
     "multer": "^2.0.0",
     "prisma": "^5.16.2",
