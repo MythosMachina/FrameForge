@@ -527,10 +527,14 @@ def predict_tags(
     device: torch.device,
     trigger_tag: Optional[str] = None,
     verify_colors: bool = False,
+    use_bgr: bool = False,
 ) -> str:
     blacklist_set = {t.strip().lower() for t in blacklist if t.strip()}
     image = Image.open(image_path).convert("RGB")
-    tensor = transform(image).unsqueeze(0).to(device)
+    tensor = transform(image).unsqueeze(0)
+    if use_bgr:
+        tensor = tensor[:, [2, 1, 0], :, :]
+    tensor = tensor.to(device)
     with torch.inference_mode():
         if device.type == "cuda":
             with torch.cuda.amp.autocast():
@@ -598,6 +602,13 @@ def filter_tags(tag_line: str, patterns: Iterable[str], allowlist: Optional[Iter
     return ", ".join(filtered)
 
 
+def _use_bgr_for_model(model_id: str) -> bool:
+    """
+    WD taggers are often trained with BGR channel order; swap channels to match.
+    """
+    return "/wd-" in model_id.lower()
+
+
 def tag_folder(
     root: Path,
     model_id: Optional[str] = None,
@@ -628,6 +639,7 @@ def tag_folder(
         raise RuntimeError("CUDA requested for autotag but no GPU is available.")
 
     labels, categories, model, transform, device_obj = load_labels_and_model(settings.model_id, device_obj.type)
+    use_bgr = _use_bgr_for_model(settings.model_id)
     dataset_dirs = [p for p in sorted(root.iterdir()) if p.is_dir()]
     if not dataset_dirs:
         dataset_dirs = [root] if root.is_dir() else []
@@ -668,6 +680,7 @@ def tag_folder(
                     device=device_obj,
                     trigger_tag=trigger,
                     verify_colors=verify_colors,
+                    use_bgr=use_bgr,
                 )
                 if patterns:
                     allow_patterns = list(allow or [])
