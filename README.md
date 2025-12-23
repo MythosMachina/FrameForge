@@ -25,6 +25,10 @@ Use on real individuals without consent is explicitly discouraged.“
 - ffmpeg in PATH
 - GPU recommended for tagging; required for training
 
+## Security notice (local-only)
+FrameForge is intended for local use only. Do not expose it to the public
+internet. At most, run it on a trusted LAN; never on WAN.
+
 ## Install (single venv)
 Use the consolidated setup script:
 ```bash
