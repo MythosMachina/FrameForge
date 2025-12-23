@@ -31,5 +31,12 @@ Please confirm the following:
 - [ ] I did not include unrelated changes
 - [ ] This PR is ready for review
 
+## Repo Checklist
+- [ ] Changelog entry added (with Change Type, Why, What, Impact, Testing, Docs, Rollback)
+- [ ] README and docs updated (or confirmed N/A)
+- [ ] Tests added/updated and passing locally
+- [ ] Backward compatibility considered (noted breaking changes)
+- [ ] Security and secrets unaffected (or documented mitigation)
+
 ## Additional Notes
 Add any additional context, screenshots, or information for reviewers here.
