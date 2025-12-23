@@ -670,6 +670,38 @@ textarea:focus {
   color: var(--muted);
   word-break: break-word;
 }
+.corner-hover {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 70;
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+  font-family: var(--mono);
+}
+.corner-hover-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+}
+.corner-hover-title {
+  color: var(--text);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+.corner-hover a {
+  color: var(--accent);
+  font-size: 12px;
+  text-decoration: none;
+}
+.corner-hover a:hover {
+  text-decoration: underline;
+}
 .lightbox-backdrop {
   position: fixed;
   inset: 0;
