@@ -45,7 +45,7 @@ COLOR_CANONICAL = {
 }
 DEFAULT_MAX_TAGS = 30
 CONFIG_FILE = Path(__file__).resolve().parent / "autotag.config.json"
-AUTOCHAR_PRESETS_DIR = Path(__file__).resolve().parent / "autotag_presets"
+MACROS_DIR = Path(__file__).resolve().parent / "preset" / "macros"
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
 TAG_FILE = "selected_tags.csv"
 WEIGHTS_FILE = "model.safetensors"
@@ -411,6 +411,35 @@ def predict_tags(
 def _normalize_tag(text: str) -> str:
     return " ".join(text.strip().lower().replace("_", " ").split())
 
+@lru_cache(maxsize=4)
+def _load_macro_values(name: str) -> List[str]:
+    path = MACROS_DIR / f"{name}.json"
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        values = data.get("values") if isinstance(data, dict) else None
+        if isinstance(values, list):
+            return [str(v).strip() for v in values if str(v).strip()]
+    except Exception:
+        return []
+    return []
+
+
+def _expand_macro_patterns(patterns: Iterable[str]) -> List[str]:
+    colors = _load_macro_values("colors")
+    targets = _load_macro_values("color_targets")
+    expanded: List[str] = []
+    for pat in patterns:
+        raw = str(pat).strip()
+        if raw.startswith("@colors:"):
+            target = raw.split(":", 1)[1].strip()
+            if target and (not targets or target in targets):
+                expanded.extend([f"{c} {target}" for c in colors])
+                continue
+        expanded.append(raw)
+    return expanded
+
 
 def _match_wildcard(pattern: str, tag: str) -> bool:
     pat = _normalize_tag(pattern)
@@ -441,9 +470,10 @@ def filter_tags(tag_line: str, patterns: Iterable[str]) -> str:
     tags = [t.strip() for t in tag_line.split(",") if t.strip()]
     if not tags:
         return tag_line
+    expanded = _expand_macro_patterns(patterns)
     keep = [tags[0]]
     for tag in tags[1:]:
-        if any(_match_wildcard(pat, tag) for pat in patterns):
+        if any(_match_wildcard(pat, tag) for pat in expanded):
             continue
         keep.append(tag)
     return ", ".join(keep)
