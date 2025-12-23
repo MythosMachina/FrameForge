@@ -1218,22 +1218,27 @@ app.post('/api/upload/commit', async (req, res) => {
 app.post('/api/prune', async (_req, res) => {
   try {
     const targets = [
+      path.join(BUNDLE_ROOT, 'INBOX'),
       path.join(SYSTEM_ROOT, 'workflow', 'capped'),
       path.join(SYSTEM_ROOT, 'workflow', 'work'),
+      path.join(SYSTEM_ROOT, 'workflow', 'raw'),
       path.join(SYSTEM_ROOT, 'workflow', 'ready'),
       path.join(BUNDLE_ROOT, 'ARCHIVE', 'mp4'),
       path.join(BUNDLE_ROOT, 'OUTPUTS', 'datasets'),
       path.join(BUNDLE_ROOT, 'OUTPUTS', 'loras'),
       path.join(SYSTEM_ROOT, 'trainer', 'output'),
       path.join(SYSTEM_ROOT, 'trainer', 'logs'),
-      path.join(SYSTEM_ROOT, 'trainer', 'jobs'),
       path.join(SYSTEM_ROOT, 'trainer', 'dataset'),
+      path.join(BUNDLE_ROOT, 'trainer', 'jobs'),
       path.join(BUNDLE_ROOT, 'ARCHIVE', 'zips'),
     ];
     for (const t of targets) {
       await fs.promises.rm(t, { recursive: true, force: true });
       await fs.promises.mkdir(t, { recursive: true });
     }
+    await dbExec("DELETE FROM RunPlan", []);
+    await dbExec("DELETE FROM TrainProgress", []);
+    await dbExec("DELETE FROM WorkerStatus", []);
     await dbExec("DELETE FROM Run", []);
     await dbExec("DELETE FROM StagedUpload", []);
     res.json({ ok: true });
