@@ -55,8 +55,5 @@ For UI usage and workflows, see the docs:
 ## Security
 FrameForge is intended for local use only. Do not expose it to the public internet.
 
-## Changelog
-See `Changelog/Changelog.md`.
-
 ## License
 MIT
