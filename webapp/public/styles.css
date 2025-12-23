@@ -663,11 +663,48 @@ textarea:focus {
   border-radius: 8px;
   border: 1px solid var(--border);
   object-fit: cover;
+  cursor: zoom-in;
 }
 .sample-grid figcaption {
   font-size: 12px;
   color: var(--muted);
   word-break: break-word;
+}
+.lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.lightbox {
+  position: relative;
+  max-width: 95vw;
+  max-height: 90vh;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+}
+.lightbox img {
+  max-width: 95vw;
+  max-height: 80vh;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  object-fit: contain;
+  background: #000;
+}
+.lightbox-caption {
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  max-width: 80vw;
+  word-break: break-word;
+}
+.lightbox-close {
+  justify-self: end;
 }
 .manual-toolbar {
   display: grid;
