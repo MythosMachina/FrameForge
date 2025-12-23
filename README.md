@@ -9,6 +9,8 @@ End-to-end dataset and LoRA training pipeline that turns ZIP uploads into clean,
 > FrameForge is designed for fictional, stylized, and synthetic content.  
 > Use on real individuals without consent is explicitly discouraged.
 
+>Importrant Notice: FrameForge is currently only for PonyXL Training calibrated. More will follow if Demand comes.
+
 ## Features
 - Pipeline stages: import → select → crop → tag → (optional) train → package.
 - Orchestrated services: initiator, orchestrator, finisher, DB broker, webapp.
