@@ -237,14 +237,13 @@ def load_txt_list(path: Path) -> List[str]:
     return lines
 
 
-def load_autochar_lists(preset: Optional[str]) -> Tuple[List[str], List[str]]:
+def load_autochar_lists(preset: Optional[str]) -> List[str]:
     """
-    Load autochar block/allow lists from the RUN_DB AutoCharPreset table only.
+    Load autochar block list from the RUN_DB AutoCharPreset table only.
     Multiple presets can be comma-separated; results are concatenated.
     No local file fallbacks to keep the DB as single source of truth.
     """
     block: List[str] = []
-    allow: List[str] = []
     db_path = os.environ.get("RUN_DB")
     names: List[str] = []
     if preset:
@@ -256,9 +255,8 @@ def load_autochar_lists(preset: Optional[str]) -> Tuple[List[str], List[str]]:
             if rows:
                 for row in rows:
                     block += json.loads(row.get("block") or "[]")
-                    allow += json.loads(row.get("allow") or "[]")
                     print(f"[info] Autochar preset from DB: {row.get('name')}")
-                return block, allow
+                return block
         except Exception as e:
             print(f"[warn] Autochar preset broker lookup failed ({e}); no patterns applied")
     # Only DB is authoritative
@@ -279,18 +277,17 @@ def load_autochar_lists(preset: Optional[str]) -> Tuple[List[str], List[str]]:
                 if first:
                     rows.append((first[0], (first[1], first[2])))
             if rows:
-                for name, (b_raw, a_raw) in rows:
+                for name, (b_raw, _a_raw) in rows:
                     block += json.loads(b_raw or "[]")
-                    allow += json.loads(a_raw or "[]")
                     print(f"[info] Autochar preset from DB: {name}")
                 conn.close()
-                return block, allow
+                return block
             conn.close()
         except Exception as e:
             print(f"[warn] Autochar preset DB lookup failed ({e}); no patterns applied")
     if preset:
         print(f"[warn] Autochar preset '{preset}' not found in DB; no patterns applied")
-    return block, allow
+    return block
 
 
 def strip_run_prefix(name: str) -> str:
@@ -411,21 +408,45 @@ def predict_tags(
     return ", ".join(parts)
 
 
-def filter_tags(tag_line: str, patterns: Iterable[str], allowlist: Optional[Iterable[str]] = None) -> str:
-    """
-    Remove tags matching any regex in patterns (case-insensitive).
-    """
-    import re
+def _normalize_tag(text: str) -> str:
+    return " ".join(text.strip().lower().replace("_", " ").split())
 
-    compiled = [re.compile(pat, re.IGNORECASE) for pat in patterns]
-    allow = [re.compile(pat, re.IGNORECASE) for pat in allowlist or []]
+
+def _match_wildcard(pattern: str, tag: str) -> bool:
+    pat = _normalize_tag(pattern)
+    tgt = _normalize_tag(tag)
+    if "*" not in pat:
+        return pat == tgt
+    parts = pat.split("*")
+    if parts and parts[0] and not tgt.startswith(parts[0]):
+        return False
+    if parts and parts[-1] and not tgt.endswith(parts[-1]):
+        return False
+    idx = 0
+    for part in parts:
+        if not part:
+            continue
+        pos = tgt.find(part, idx)
+        if pos == -1:
+            return False
+        idx = pos + len(part)
+    return True
+
+
+def filter_tags(tag_line: str, patterns: Iterable[str]) -> str:
+    """
+    Remove tags matching any wildcard pattern (case-insensitive).
+    Tag separator is ", " and the first tag is preserved.
+    """
     tags = [t.strip() for t in tag_line.split(",") if t.strip()]
-    filtered = [
-        t for t in tags
-        if not any(regex.search(t) for regex in compiled)
-        or any(regex.search(t) for regex in allow)
-    ]
-    return ", ".join(filtered)
+    if not tags:
+        return tag_line
+    keep = [tags[0]]
+    for tag in tags[1:]:
+        if any(_match_wildcard(pat, tag) for pat in patterns):
+            continue
+        keep.append(tag)
+    return ", ".join(keep)
 
 
 def _use_bgr_for_model(model_id: str) -> bool:
@@ -481,9 +502,8 @@ def tag_folder(
             elif preset_marker.exists():
                 preset_name = preset_marker.read_text(encoding="utf-8").strip() or None
             patterns = None
-            allow = None
             if autochar_enabled and preset_name:
-                patterns, allow = load_autochar_lists(preset_name)
+                patterns = load_autochar_lists(preset_name)
                 print(f"[info] Autochar filtering enabled for {ds.name} ({len(patterns or [])} patterns, preset={preset_name})")
 
             trigger = strip_run_prefix(ds.name).strip("_- ")
@@ -505,10 +525,7 @@ def tag_folder(
                     use_bgr=use_bgr,
                 )
                 if patterns:
-                    allow_patterns = list(allow or [])
-                    if trigger:
-                        allow_patterns.append(re.escape(trigger))
-                    tag_line = filter_tags(tag_line, patterns, allowlist=allow_patterns)
+                    tag_line = filter_tags(tag_line, patterns)
                 out_path = image_path.with_suffix(".txt")
                 out_path.write_text(tag_line, encoding="utf-8")
     finally:

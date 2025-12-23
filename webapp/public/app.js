@@ -1842,7 +1842,7 @@ function renderAutocharCard(p) {
         <div class="label">Preset</div>
         <div class="title">${p.name}</div>
       </div>
-      <span class="pill pill-queued">${p.blockPatterns?.length || 0} block • ${p.allowPatterns?.length || 0} allow</span>
+      <span class="pill pill-queued">${p.blockPatterns?.length || 0} block</span>
     </div>
     <p class="meta">${p.description || ""}</p>
     <div class="actions">

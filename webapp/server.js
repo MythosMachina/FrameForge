@@ -341,10 +341,17 @@ async function setQueueMode(mode) {
 }
 
 function parsePatternText(text = '') {
-  return text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l && !l.startsWith('#') && !l.startsWith('//'));
+  const lines = text.split(/\r?\n/);
+  const out = [];
+  for (const line of lines) {
+    const raw = line.trim();
+    if (!raw || raw.startsWith('#') || raw.startsWith('//')) continue;
+    for (const chunk of raw.split(',')) {
+      const item = chunk.trim();
+      if (item) out.push(item);
+    }
+  }
+  return out;
 }
 
 async function removePath(target) {
