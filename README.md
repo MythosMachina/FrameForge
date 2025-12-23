@@ -15,7 +15,7 @@ End-to-end dataset and LoRA training pipeline that turns ZIP uploads into clean,
 - Pipeline stages: import → select → crop → tag → (optional) train → package.
 - Orchestrated services: initiator, orchestrator, finisher, DB broker, webapp.
 - Web UI for uploads, queue monitoring, manual tagging, and downloads.
-- Training integration with **Kohya_ss** scripts (https://github.com/bmaltais/kohya_ss).
+- Training integration with **Kohya_ss** scripts ([https://github.com/bmaltais/kohya_ss](https://github.com/kohya-ss/sd-scripts)).
 
 ## Quick Start
 ```bash
