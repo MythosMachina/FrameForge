@@ -64,6 +64,9 @@ log "pushing Prisma schema to SQLite"
 DATABASE_URL="file:${DB_PATH}" npx prisma db push
 popd >/dev/null
 
+log "seeding basic DB data (settings, train profiles, tagger)"
+"${VENV_DIR}/bin/python3" "${ROOT_DIR}/scripts/seed_basic_data.py"
+
 log "writing systemd unit files to ${SYSTEMD_DIR}"
 mkdir -p "${SYSTEMD_DIR}"
 
