@@ -27,6 +27,7 @@ Examples:
 - `@colors:eyes` removes all color eye tags.
 - `@colors:fur` removes all color fur tags.
 - `@animals:girl` removes `cat girl`, `wolf girl`, etc. if `animals.txt` exists.
+Note: Macro names come from files in `preset/macros/` (e.g., `colors.txt` -> `@colors`).
 
 Macro sources:
 - `preset/macros/colors.txt`
