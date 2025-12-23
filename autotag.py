@@ -69,173 +69,6 @@ COLOR_RULES = {
     "gray": {"ranges": [(0, 360)], "sat_max": 0.2, "val_min": 0.2, "val_max": 0.9},
 }
 
-# Regex filters for autochar cleanup (hair/eye colors, clothing, etc.)
-AUTOCHAR_DEFAULT_PATTERNS = [
-    # Hair (any color/style)
-    r".*\bhair\b.*",
-    # Eyes (any color/style)
-    r".*\beyes\b.*",
-    # Fur descriptors (colors/types)
-    r".*\bfur\b.*",
-    # Clothing / outfit descriptors
-    r".*\b(skirt|shirt|pants|shorts|dress|jacket|coat|bra|panties|lingerie|uniform|socks|stockings|boots|shoes|gloves|belt|hat|helmet|hood|cape|scarf|tie|robe|kimono|swimsuit|bikini|hoodie|sweater|cardigan|apron|armor)\b.*",
-]
-AUTOCHAR_ALLOWLIST = [
-    r"eyes closed",
-    r"closed eyes",
-    r"half-closed eyes",
-    r"partially closed eyes",
-    r"squinting",
-    # Eye-related tags (non-color) to preserve when autochar is active
-    r"hair_between_eyes",
-    r"closed_eyes",
-    r"one_eye_closed",
-    r"hair_over_one_eye",
-    r"v-shaped_eyebrows",
-    r"eyelashes",
-    r"mole_under_eye",
-    r"thick_eyebrows",
-    r"half-closed_eyes",
-    r"eyepatch",
-    r"eyes_visible_through_hair",
-    r"eyewear_on_head",
-    r"third_eye",
-    r"glowing_eyes",
-    r"semi-rimless_eyewear",
-    r"eyeshadow",
-    r"eye_contact",
-    r"black-framed_eyewear",
-    r"round_eyewear",
-    r"crying_with_eyes_open",
-    r"one_eye_covered",
-    r"red-framed_eyewear",
-    r"empty_eyes",
-    r"raised_eyebrows",
-    r"under-rim_eyewear",
-    r"wide-eyed",
-    r"multicolored_eyes",
-    r"colored_eyelashes",
-    r"eyebrows_hidden_by_hair",
-    r"short_eyebrows",
-    r"scar_across_eye",
-    r"bags_under_eyes",
-    r"eyeliner",
-    r"adjusting_eyewear",
-    r"hair_over_eyes",
-    r"eyeball",
-    r"tinted_eyewear",
-    r"ringed_eyes",
-    r"covered_eyes",
-    r"symbol_in_eye",
-    r"alternate_eye_color",
-    r"unworn_eyewear",
-    r"rolling_eyes",
-    r"glowing_eye",
-    r"one-eyed",
-    r"blank_eyes",
-    r"sparkling_eyes",
-    r"red_eyeshadow",
-    r"rimless_eyewear",
-    r"no_eyes",
-    r"extra_eyes",
-    r"solid_oval_eyes",
-    r"solid_circle_eyes",
-    r"star_in_eye",
-    r"holding_removed_eyewear",
-    r"gradient_eyes",
-    r"raised_eyebrow",
-    r"crazy_eyes",
-    r"half-closed_eye",
-    r"forked_eyebrows",
-    r"v_over_eye",
-    r"heart_in_eye",
-    r"long_eyelashes",
-    r"heart-shaped_eyewear",
-    r"uneven_eyes",
-    r"fisheye",
-    r"bandage_over_one_eye",
-    r"medical_eyepatch",
-    r"rectangular_eyewear",
-    r"eyepatch_bikini",
-    r"red_eyeliner",
-    r"blue-framed_eyewear",
-    r"eye_mask",
-    r"over-rim_eyewear",
-    r"covering_own_eyes",
-    r"rubbing_eyes",
-    r"looking_over_eyewear",
-    r"pink-framed_eyewear",
-    r"flaming_eye",
-    r"narrowed_eyes",
-    r"no_eyewear",
-    r"averting_eyes",
-    r"grey-framed_eyewear",
-    r"shading_eyes",
-    r"orange-tinted_eyewear",
-    r"yellow-framed_eyewear",
-    r"white-framed_eyewear",
-    r"blue_eyeshadow",
-    r"eye_focus",
-    r"red-tinted_eyewear",
-    r"eyebrow_cut",
-    r"eyebrow_piercing",
-    r"blood_from_eyes",
-    r"two-tone_eyes",
-    r"upturned_eyes",
-    r"hand_on_eyewear",
-    r"green-framed_eyewear",
-    r"eyewear_on_headwear",
-    r"pink_eyeshadow",
-    r"brown-framed_eyewear",
-    r"blue-tinted_eyewear",
-    r"purple_eyeshadow",
-    r"purple-tinted_eyewear",
-    r"unusually_open_eyes",
-    r"eyewear_strap",
-    r"artificial_eye",
-    r"no_eyebrows",
-    r"pink-tinted_eyewear",
-    r"mechanical_eye",
-    r"button_eyes",
-    r"eyewear_hang",
-    r"solid_eyes",
-    r"eye_of_horus",
-    r"eye_trail",
-    r"eyelid_pull",
-    r"huge_eyebrows",
-    r"covering_one_eye",
-    r"thick_eyelashes",
-    r"hat_over_one_eye",
-    r"no_eyepatch",
-    r"mismatched_eyebrows",
-    r"purple-framed_eyewear",
-    r"flower_over_eye",
-    r"yellow-tinted_eyewear",
-    r"dashed_eyes",
-    r"cephalopod_eyes",
-    r"v-shaped_eyes",
-    r"green-tinted_eyewear",
-    r"wavy_eyes",
-    r"heart-shaped_eyes",
-    r"hand_over_eye",
-    r"hollow_eyes",
-    r"unworn_eyepatch",
-    r"green_eyeshadow",
-    r"flower_in_eye",
-    r"cum_on_eyewear",
-    r"eye_black",
-    r"eye_reflection",
-    r"mole_under_each_eye",
-    r"clock_eyes",
-    r"penis_over_eyes",
-    r"curly_eyebrows",
-    r"star-shaped_eyewear",
-    r"bloodshot_eyes",
-    r"bulging_eyes",
-    r"wide_oval_eyes",
-    r"covering_another's_eyes",
-    r"riza_hawkeye",
-]
 
 RUN_PREFIX_RE = re.compile(r"^[0-9]{6}[_-]")
 
@@ -246,7 +79,6 @@ class TaggerSettings:
     general_threshold: float = DEFAULT_GENERAL_THRESHOLD
     character_threshold: float = DEFAULT_CHARACTER_THRESHOLD
     max_tags: int = DEFAULT_MAX_TAGS
-    blacklist: List[str] = field(default_factory=list)
 
 
 def iter_images(root: Path) -> Iterable[Path]:
@@ -272,7 +104,6 @@ def load_config(path: Optional[Path] = None) -> TaggerSettings:
         settings.general_threshold = float(data.get("general_threshold", settings.general_threshold))
         settings.character_threshold = float(data.get("character_threshold", settings.character_threshold))
         settings.max_tags = int(data.get("max_tags", settings.max_tags))
-        settings.blacklist = [t.strip() for t in data.get("blacklist", []) if isinstance(t, str) and t.strip()]
         # Allow selecting model via first uncommented preset (use # or // to comment out)
         def pick_preset(presets: List[str]) -> Optional[str]:
             for candidate in presets:
@@ -303,7 +134,6 @@ def load_config(path: Optional[Path] = None) -> TaggerSettings:
                     "general_threshold": settings.general_threshold,
                     "character_threshold": settings.character_threshold,
                     "max_tags": settings.max_tags,
-                    "blacklist": [],
                 },
                 indent=2,
             ),
@@ -523,13 +353,11 @@ def predict_tags(
     general_threshold: float,
     character_threshold: float,
     max_tags: int,
-    blacklist: Iterable[str],
     device: torch.device,
     trigger_tag: Optional[str] = None,
     verify_colors: bool = False,
     use_bgr: bool = False,
 ) -> str:
-    blacklist_set = {t.strip().lower() for t in blacklist if t.strip()}
     image = Image.open(image_path).convert("RGB")
     tensor = transform(image).unsqueeze(0)
     if use_bgr:
@@ -570,13 +398,11 @@ def predict_tags(
     tags.sort(key=lambda t: t[0], reverse=True)
 
     parts: List[str] = []
-    if trigger_tag and trigger_tag.lower() not in blacklist_set:
+    if trigger_tag:
         parts.append(trigger_tag)
 
     remaining_slots = max(max_tags - len(parts), 0)
     for _, tag in tags:
-        if tag.lower() in blacklist_set:
-            continue
         if remaining_slots <= 0:
             break
         parts.append(tag)
@@ -644,9 +470,6 @@ def tag_folder(
     if not dataset_dirs:
         dataset_dirs = [root] if root.is_dir() else []
 
-    # Centralize tag filtering: ignore config blacklist, rely on AutoChar presets/DB only
-    settings.blacklist = []
-
     try:
         for ds in dataset_dirs:
             preset_name = None
@@ -676,7 +499,6 @@ def tag_folder(
                     general_threshold=settings.general_threshold,
                     character_threshold=settings.character_threshold,
                     max_tags=settings.max_tags,
-                    blacklist=settings.blacklist,
                     device=device_obj,
                     trigger_tag=trigger,
                     verify_colors=verify_colors,
