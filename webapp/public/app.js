@@ -1365,6 +1365,25 @@ window.stopRun = stopRun;
 window.openSamples = openSamples;
 window.openResults = openResults;
 
+function openLightbox(src, label = "") {
+  const overlay = document.createElement("div");
+  overlay.className = "lightbox-backdrop";
+  const box = document.createElement("div");
+  box.className = "lightbox";
+  box.innerHTML = `
+    <button class="btn ghost lightbox-close" type="button">Close</button>
+    <img src="${src}" alt="${label}">
+    ${label ? `<div class="lightbox-caption">${label}</div>` : ""}
+  `;
+  overlay.appendChild(box);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+  const closeBtn = box.querySelector(".lightbox-close");
+  closeBtn?.addEventListener("click", () => overlay.remove());
+  document.body.appendChild(overlay);
+}
+
 async function openSamples(id, runName = "") {
   try {
     const res = await fetch(`/api/run/${id}/samples`);
@@ -1401,6 +1420,8 @@ async function openSamples(id, runName = "") {
         <img src="${s.url}" alt="${s.name}">
         <figcaption>${s.label || s.name}</figcaption>
       `;
+      const img = fig.querySelector("img");
+      img?.addEventListener("click", () => openLightbox(s.url, s.label || s.name));
       grid.appendChild(fig);
     });
     modal.appendChild(head);
@@ -1504,6 +1525,12 @@ async function openResults(id, runName = "") {
 
     modal.appendChild(sections);
     overlay.appendChild(modal);
+    overlay.querySelectorAll(".sample-grid img").forEach((img) => {
+      img.addEventListener("click", () => {
+        const caption = img.closest("figure")?.querySelector("figcaption")?.textContent || "";
+        openLightbox(img.getAttribute("src") || "", caption);
+      });
+    });
     overlay.addEventListener("click", (e) => {
       if (e.target === overlay) overlay.remove();
     });
