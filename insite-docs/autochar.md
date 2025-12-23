@@ -7,14 +7,15 @@ AutoChar removes unwanted tags after autotagging. Presets are shared in the WebA
 - All rules from selected presets are combined.
 - The trigger tag (the folder name without RunID) is always kept.
 
-## Simple rules (recommended)
-- Add one tag or phrase per line.
-- Example: `blonde hair` removes any tag containing that text.
+## Rules (clear words + wildcards)
+- Add one tag or wildcard per line (or comma-separated).
+- Wildcards use `*` and are case-insensitive.
+- `_` and spaces are treated the same (e.g., `blue_hair` matches `blue hair`).
+- The trigger tag (first tag) is always preserved.
 
-## Advanced rules (optional)
-Rules use regex (case-insensitive).
-- Exact match: `^blonde_hair$`
-- Any word: `\b(bikini|swimsuit)\b`
-- Ends with: `.*hair`
+Examples:
+- `*_hair` removes any hair color tag.
+- `blue_hair` removes only blue hair.
+- `bikini, swimsuit` removes both tags.
 
 Edit presets in the AutoChar editor. Changes apply immediately.
