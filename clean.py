@@ -9,12 +9,14 @@ SYSTEM_ROOT = BUNDLE_ROOT / "_system"
 INPUT_ROOT = BUNDLE_ROOT / "INBOX"
 FRAMES_ROOT = SYSTEM_ROOT / "workflow" / "capped"
 WORKSPACE_ROOT = SYSTEM_ROOT / "workflow" / "work"
+WORKSPACE_RAW = SYSTEM_ROOT / "workflow" / "raw"
 READY_AUTOTAG = SYSTEM_ROOT / "workflow" / "ready"
 FINAL_OUTPUT = BUNDLE_ROOT / "OUTPUTS" / "datasets"
 ARCHIVE_MP4 = BUNDLE_ROOT / "ARCHIVE" / "mp4"
-TRAIN_JOBS = SYSTEM_ROOT / "trainer" / "jobs"
+ARCHIVE_ZIPS = BUNDLE_ROOT / "ARCHIVE" / "zips"
+TRAIN_JOBS = BUNDLE_ROOT / "trainer" / "jobs"
 TRAIN_OUTPUT = SYSTEM_ROOT / "trainer" / "output"
-TRAIN_MODELS = BUNDLE_ROOT / "trainer" / "models"
+TRAIN_DATASET = SYSTEM_ROOT / "trainer" / "dataset"
 TRAIN_LOGS = SYSTEM_ROOT / "trainer" / "logs"
 FINAL_LORA = BUNDLE_ROOT / "OUTPUTS" / "loras"
 TRAIN_FLAG = SYSTEM_ROOT / "flags" / "TRAINING_RUNNING"
@@ -80,9 +82,9 @@ def main() -> None:
         ensure_dir(INPUT_ROOT)
         for name in ["furry", "human", "dragon", "daemon"]:
             ensure_dir(INPUT_ROOT / name)
-        clean_group([FRAMES_ROOT, WORKSPACE_ROOT], "workspace")
-        clean_group([FINAL_OUTPUT, READY_AUTOTAG, ARCHIVE_MP4], "output")
-        clean_group([TRAIN_OUTPUT, TRAIN_LOGS, FINAL_LORA], "trainer outputs")
+        clean_group([FRAMES_ROOT, WORKSPACE_ROOT, WORKSPACE_RAW], "workspace")
+        clean_group([FINAL_OUTPUT, FINAL_LORA, READY_AUTOTAG, ARCHIVE_MP4, ARCHIVE_ZIPS], "output")
+        clean_group([TRAIN_OUTPUT, TRAIN_LOGS, TRAIN_DATASET], "trainer outputs")
         remove_flags()
         # jobs: keep sample
         log("Cleaning trainer jobs (preserving sample_job.json)")
@@ -99,11 +101,11 @@ def main() -> None:
     if args.clean_import:
         clean_group([INPUT_ROOT], "INBOX")
     elif args.clean_work:
-        clean_group([FRAMES_ROOT, WORKSPACE_ROOT], "work")
+        clean_group([FRAMES_ROOT, WORKSPACE_ROOT, WORKSPACE_RAW], "work")
     elif args.clean_output:
-        clean_group([FINAL_OUTPUT, READY_AUTOTAG, ARCHIVE_MP4], "output")
+        clean_group([FINAL_OUTPUT, FINAL_LORA, READY_AUTOTAG, ARCHIVE_MP4, ARCHIVE_ZIPS], "output")
     elif args.clean_train:
-        clean_group([TRAIN_OUTPUT, TRAIN_LOGS, FINAL_LORA], "trainer outputs")
+        clean_group([TRAIN_OUTPUT, TRAIN_LOGS, TRAIN_DATASET], "trainer outputs")
         log("Cleaning trainer jobs (preserving sample_job.json)")
         ensure_dir(TRAIN_JOBS)
         for child in TRAIN_JOBS.iterdir():
