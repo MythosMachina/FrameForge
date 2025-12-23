@@ -1115,6 +1115,7 @@ async function refreshHistory() {
 }
 
 let autocharReqId = 0;
+let autocharEditingId = "";
 async function refreshAutochar() {
   const container = document.getElementById("autochar-list");
   if (!container) return;
@@ -1868,6 +1869,7 @@ function fillAutocharForm(p) {
   const form = document.getElementById("autochar-form");
   const uploadSelect = document.getElementById("autochar-presets");
   if (!form) return;
+  autocharEditingId = p.id || "";
   form.querySelector('input[name="id"]').value = p.id || "";
   form.querySelector('input[name="name"]').value = p.name || "";
   form.querySelector('input[name="description"]').value = p.description || "";
@@ -1901,6 +1903,7 @@ function wireAutocharForm() {
   const msgEl = document.getElementById("autochar-msg");
   const uploadSelect = document.getElementById("autochar-presets");
   if (!form) return;
+  autocharEditingId = "";
   const setMsg = (text, cls = "") => {
     if (!msgEl) return;
     msgEl.textContent = text;
@@ -1909,7 +1912,9 @@ function wireAutocharForm() {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(form);
-    const id = fd.get("id");
+    const idRaw = String(autocharEditingId || "").trim();
+    const id = idRaw ? Number(idRaw) : null;
+    const hasId = Number.isFinite(id) && id > 0;
     const payload = {
       name: fd.get("name"),
       description: fd.get("description"),
@@ -1918,8 +1923,8 @@ function wireAutocharForm() {
     };
     setMsg("Saving...", "");
     try {
-      const res = await fetch(id ? `/api/autochar/${id}` : "/api/autochar", {
-        method: id ? "PUT" : "POST",
+      const res = await fetch(hasId ? `/api/autochar/${id}` : "/api/autochar", {
+        method: hasId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -1929,6 +1934,8 @@ function wireAutocharForm() {
       }
       setMsg("Saved", "ok");
       form.reset();
+      autocharEditingId = "";
+      form.querySelector('input[name="id"]').value = "";
       await refreshAutochar();
       if (uploadSelect) {
         // refresh upload select options
@@ -1940,6 +1947,7 @@ function wireAutocharForm() {
   });
   resetBtn?.addEventListener("click", () => {
     form.reset();
+    autocharEditingId = "";
     form.querySelector('input[name="id"]').value = "";
     setMsg("", "");
   });
