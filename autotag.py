@@ -411,32 +411,54 @@ def predict_tags(
 def _normalize_tag(text: str) -> str:
     return " ".join(text.strip().lower().replace("_", " ").split())
 
-@lru_cache(maxsize=4)
+@lru_cache(maxsize=16)
 def _load_macro_values(name: str) -> List[str]:
-    path = MACROS_DIR / f"{name}.json"
-    if not path.exists():
-        return []
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        values = data.get("values") if isinstance(data, dict) else None
-        if isinstance(values, list):
-            return [str(v).strip() for v in values if str(v).strip()]
-    except Exception:
-        return []
+    txt_path = MACROS_DIR / f"{name}.txt"
+    json_path = MACROS_DIR / f"{name}.json"
+    if txt_path.exists():
+        values: List[str] = []
+        for line in txt_path.read_text(encoding="utf-8").splitlines():
+            raw = line.strip()
+            if not raw or raw.startswith("#") or raw.startswith("//"):
+                continue
+            for chunk in raw.split(","):
+                item = chunk.strip()
+                if item:
+                    values.append(item)
+        return values
+    if json_path.exists():
+        try:
+            data = json.loads(json_path.read_text(encoding="utf-8"))
+            values = data.get("values") if isinstance(data, dict) else None
+            if isinstance(values, list):
+                return [str(v).strip() for v in values if str(v).strip()]
+        except Exception:
+            return []
     return []
 
 
 def _expand_macro_patterns(patterns: Iterable[str]) -> List[str]:
-    colors = _load_macro_values("colors")
-    targets = _load_macro_values("color_targets")
     expanded: List[str] = []
     for pat in patterns:
         raw = str(pat).strip()
-        if raw.startswith("@colors:"):
-            target = raw.split(":", 1)[1].strip()
-            if target and (not targets or target in targets):
-                expanded.extend([f"{c} {target}" for c in colors])
+        if raw.startswith("@"):
+            macro_spec = raw[1:]
+            macro_name, sep, suffix = macro_spec.partition(":")
+            macro_name = macro_name.strip()
+            if not macro_name:
+                expanded.append(raw)
                 continue
+            values = _load_macro_values(macro_name)
+            if not values:
+                expanded.append(raw)
+                continue
+            if sep:
+                suffix = suffix.strip()
+                if suffix:
+                    expanded.extend([f"{v} {suffix}" for v in values])
+                    continue
+            expanded.extend(values)
+            continue
         expanded.append(raw)
     return expanded
 
