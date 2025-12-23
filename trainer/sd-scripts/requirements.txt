@@ -41,7 +41,7 @@ numpy<=2.0
 # open clip for SDXL
 # open-clip-torch==2.20.0
 # For logging
-rich==13.7.0
+rich==14.2.0
 # for T5XXL tokenizer (SD3/FLUX)
 sentencepiece==0.2.0
 # for kohya_ss library
