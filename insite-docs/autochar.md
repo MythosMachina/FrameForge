@@ -18,17 +18,17 @@ Examples:
 - `blue_hair` removes only blue hair.
 - `bikini, swimsuit` removes both tags.
 
-## Macros (color variants)
-Macros expand to multiple tags using preset macro files.
+## Macros (file-based)
+Macros expand to multiple tags using preset macro files in `preset/macros/`.
+Macro names come from the filename (e.g., `colors.txt` -> `@colors`).
 
 Examples:
 - `@colors:hair` removes all color hair tags (e.g., `blonde_hair`, `blue_hair`).
 - `@colors:eyes` removes all color eye tags.
 - `@colors:fur` removes all color fur tags.
-- `@colors:skin`, `@colors:tail`, `@colors:ears`, `@colors:wings`, `@colors:scales` are also supported.
+- `@animals:girl` removes `cat girl`, `wolf girl`, etc. if `animals.txt` exists.
 
 Macro sources:
-- `preset/macros/colors.json`
-- `preset/macros/color_targets.json`
+- `preset/macros/colors.txt`
 
 Edit presets in the AutoChar editor. Changes apply immediately.
