@@ -17,6 +17,9 @@ End-to-end dataset and LoRA training pipeline that turns ZIP uploads into clean,
 - Web UI for uploads, queue monitoring, manual tagging, and downloads.
 - Training integration with ([**Kohya_ss** scripts](https://github.com/kohya-ss/sd-scripts)).
 
+Support and Questions -> Discord
+https://discord.gg/TB5DHMNa5J
+
 ## Quick Start
 ```bash
 ./scripts/setup_all.sh
