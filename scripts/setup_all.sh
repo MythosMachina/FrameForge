@@ -52,7 +52,9 @@ log "installing Python dependencies"
 "${VENV_DIR}/bin/python3" -m pip install --upgrade pip
 "${VENV_DIR}/bin/python3" -m pip install -r "${ROOT_DIR}/requirements.txt"
 if [ -f "${ROOT_DIR}/trainer/requirements.txt" ]; then
-  "${VENV_DIR}/bin/python3" -m pip install -r "${ROOT_DIR}/trainer/requirements.txt"
+  pushd "${ROOT_DIR}/trainer" >/dev/null
+  "${VENV_DIR}/bin/python3" -m pip install -r "requirements.txt"
+  popd >/dev/null
 fi
 
 log "installing webapp dependencies"
@@ -202,6 +204,11 @@ StandardError=append:${LOG_DIR}/finisher.service.log
 [Install]
 WantedBy=multi-user.target
 SERVICE
+
+log "installing systemd unit files"
+cp -f "${SYSTEMD_DIR}/frameforge-"*.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now frameforge-db-broker frameforge-webapp frameforge-initiator frameforge-orchestrator frameforge-finisher
 
 log "starting model downloads in background"
 "${ROOT_DIR}/scripts/fetch_models.sh" >/dev/null 2>&1 &

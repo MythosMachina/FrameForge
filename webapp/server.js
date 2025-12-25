@@ -1267,7 +1267,6 @@ app.listen(PORT, HOST, async () => {
   await resetStaleRuns();
   await seedSettings();
   await seedTrainProfiles();
-  await seedAutocharPresets();
   await refreshModelSizes();
   log(`[init] FrameForge web app listening on http://${HOST}:${PORT}`);
   log("[init] In-app queue runner disabled");
