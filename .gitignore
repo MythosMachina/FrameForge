@@ -12,14 +12,11 @@ yarn-debug.log*
 yarn-error.log*
 
 # Runtime data and logs
-_system/db/
-_system/logs/
-_system/webapp/storage/
-_system/webapp/tagger_models/
-_system/trainer/
-_system/workflow/
+_system/
 webapp/logs/
 ARCHIVE/
 INBOX/
 OUTPUTS/
 systemd/
+trainer/models/
+trainer/jobs/
