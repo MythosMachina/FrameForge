@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/python-3.x-blue.svg)](https://www.python.org/)
 [![Node](https://img.shields.io/badge/node.js-required-green.svg)](https://nodejs.org/)
 
-End-to-end dataset and LoRA training pipeline that turns ZIP uploads into clean, tagged image datasets with a web-first workflow.
+End-to-end dataset and LoRA training pipeline that turns ZIP uploads into clean, tagged image datasets with a web-first workflow. Best use in combination with Grok Imagine Image to Video.
 
 > FrameForge is designed for fictional, stylized, and synthetic content.  
 > Use on real individuals without consent is explicitly discouraged.
