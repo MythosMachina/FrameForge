@@ -535,7 +535,6 @@ def main(args: argparse.Namespace) -> None:
         ARCHIVE_MP4.mkdir(parents=True, exist_ok=True)
         WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
         READY_AUTOTAG.mkdir(parents=True, exist_ok=True)
-        IMPORT_ROOT.mkdir(parents=True, exist_ok=True)
         FINAL_LORA.mkdir(parents=True, exist_ok=True)
         TRAIN_OUTPUT.mkdir(parents=True, exist_ok=True)
         FLAGS_ROOT.mkdir(parents=True, exist_ok=True)
