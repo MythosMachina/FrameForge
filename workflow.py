@@ -22,7 +22,6 @@ from db_broker_client import broker_enabled, broker_exec, broker_query
 BUNDLE_ROOT = Path(__file__).resolve().parent
 SYSTEM_ROOT = BUNDLE_ROOT / "_system"
 INPUT_ROOT = Path(os.environ.get("FRAMEFORGE_INPUT_ROOT", str(BUNDLE_ROOT / "INBOX")))  # place source videos/folders here
-IMPORT_ROOT = BUNDLE_ROOT / "00_import_queue"        # legacy queue (unused)
 FRAMES_ROOT = SYSTEM_ROOT / "workflow" / "capped"    # ffmpeg output
 WORKSPACE_ROOT = SYSTEM_ROOT / "workflow" / "work"   # selection + crops live here
 WORKSPACE_RAW = SYSTEM_ROOT / "workflow" / "raw"     # capped frames before selection

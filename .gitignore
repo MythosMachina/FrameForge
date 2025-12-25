@@ -20,3 +20,6 @@ OUTPUTS/
 systemd/
 trainer/models/
 trainer/jobs/
+preset/*
+!preset/
+!preset/colors*
