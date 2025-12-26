@@ -581,6 +581,35 @@ textarea:focus {
 .pill-done { background: rgba(91,216,143,0.12); color: var(--success); border-color: rgba(91,216,143,0.5); }
 .pill-failed { background: rgba(217,75,75,0.14); color: var(--danger); border-color: rgba(217,75,75,0.5); }
 
+.queue-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.queue-pos {
+  font-weight: 600;
+  color: var(--text);
+}
+.queue-buttons {
+  display: flex;
+  gap: 6px;
+}
+.queue-set {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.queue-set input {
+  width: 70px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 6px 8px;
+}
+
 .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; margin: 12px 0; }
 .step { padding: 8px 10px; border-radius: 10px; text-align: center; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid var(--border); }
 .step.done { background: rgba(91,216,143,0.12); color: var(--success); border-color: rgba(91,216,143,0.5); }

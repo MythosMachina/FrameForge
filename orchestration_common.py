@@ -68,6 +68,16 @@ def ensure_tables(conn: Optional[sqlite3.Connection]) -> None:
     )
     cur.execute(
         """
+        CREATE TABLE IF NOT EXISTS QueueItem (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            runId TEXT UNIQUE NOT NULL,
+            position INTEGER NOT NULL,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    )
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS ErrorLog (
             id INTEGER PRIMARY KEY,
             runId TEXT,
@@ -259,16 +269,29 @@ def fetch_next_run(conn: Optional[sqlite3.Connection], status: str) -> Optional[
         resp = broker_query("fetch_next_run", {"status": status})
         return resp.get("data")
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, runId, runName, name, type, flags, uploadPath, trainProfile
-        FROM Run
-        WHERE status=?
-        ORDER BY createdAt ASC
-        LIMIT 1;
-        """,
-        (status,),
-    )
+    if status == "queued":
+        cur.execute(
+            """
+            SELECT r.id, r.runId, r.runName, r.name, r.type, r.flags, r.uploadPath, r.trainProfile
+            FROM Run r
+            JOIN QueueItem q ON q.runId = r.runId
+            WHERE r.status=?
+            ORDER BY q.position ASC, r.createdAt ASC
+            LIMIT 1;
+            """,
+            (status,),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT id, runId, runName, name, type, flags, uploadPath, trainProfile
+            FROM Run
+            WHERE status=?
+            ORDER BY createdAt ASC
+            LIMIT 1;
+            """,
+            (status,),
+        )
     row = cur.fetchone()
     if not row:
         return None
@@ -338,6 +361,26 @@ def mark_run_status(
     sql = f"UPDATE Run SET {', '.join(fields)} WHERE id=?;"
     cur = conn.cursor()
     cur.execute(sql, params)
+    if status != "queued":
+        cur.execute("SELECT position FROM QueueItem WHERE runId=(SELECT runId FROM Run WHERE id=?)", (run_id_db,))
+        row = cur.fetchone()
+        if row:
+            old_pos = row[0]
+            cur.execute("DELETE FROM QueueItem WHERE runId=(SELECT runId FROM Run WHERE id=?)", (run_id_db,))
+            cur.execute("UPDATE QueueItem SET position=position-1 WHERE position>?", (old_pos,))
+    elif status == "queued":
+        cur.execute("SELECT runId FROM Run WHERE id=?", (run_id_db,))
+        row = cur.fetchone()
+        run_id = row[0] if row else None
+        if run_id:
+            cur.execute("SELECT 1 FROM QueueItem WHERE runId=?", (run_id,))
+            if not cur.fetchone():
+                cur.execute("SELECT COALESCE(MAX(position), 0) FROM QueueItem")
+                max_pos = cur.fetchone()[0] or 0
+                cur.execute(
+                    "INSERT INTO QueueItem (runId, position) VALUES (?, ?)",
+                    (run_id, int(max_pos) + 1),
+                )
     conn.commit()
 
 

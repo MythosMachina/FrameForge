@@ -1744,6 +1744,7 @@ function renderQueueCard(run) {
   const rawStatus = (run.status || "").toLowerCase();
   const isFailed = rawStatus.startsWith("failed");
   const statusLower = isFailed ? "failed" : rawStatus;
+  const queuePos = run.queuePos !== undefined && run.queuePos !== null ? Number(run.queuePos) : null;
   const pillClass =
     statusLower === "failed"
       ? "pill-failed"
@@ -1759,6 +1760,22 @@ function renderQueueCard(run) {
       : "";
   const actions = [];
   actions.push(`<button class="btn danger" onclick="stopRun(${run.id})">Stop job</button>`);
+  const canReorder = statusLower === "queued" && Number.isFinite(queuePos);
+  const reorderControls = canReorder
+    ? `
+      <div class="queue-controls">
+        <div class="queue-pos">#${queuePos}</div>
+        <div class="queue-buttons">
+          <button class="btn ghost" onclick='moveQueue(${JSON.stringify(run.runId)}, -1, ${queuePos})'>Up</button>
+          <button class="btn ghost" onclick='moveQueue(${JSON.stringify(run.runId)}, 1, ${queuePos})'>Down</button>
+        </div>
+        <div class="queue-set">
+          <input id="queue-pos-${run.runId}" type="number" min="1" value="${queuePos}">
+          <button class="btn secondary" onclick='setQueuePos(${JSON.stringify(run.runId)})'>Set</button>
+        </div>
+      </div>
+    `
+    : "";
   card.innerHTML = `
     <div class="card-head">
       <div>
@@ -1770,6 +1787,7 @@ function renderQueueCard(run) {
         ${errorInfo}
       </div>
     </div>
+    ${reorderControls}
     <div class="meta">
       <span>created: ${formatTimestamp(run.createdAt)}</span>
       <span class="info" data-tip="${buildRunInfo(run)}">info</span>
@@ -1785,6 +1803,39 @@ window.stopRun = stopRun;
 window.openSamples = openSamples;
 window.openResults = openResults;
 window.openErrorDetails = openErrorDetails;
+window.moveQueue = moveQueue;
+window.setQueuePos = setQueuePos;
+
+async function reorderQueue(runId, position) {
+  try {
+    const res = await fetch("/api/queue/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ runId, position }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "reorder failed");
+    }
+    await refreshQueue();
+  } catch (err) {
+    alert(err.message || "reorder failed");
+  }
+}
+
+function moveQueue(runId, delta, current) {
+  if (!Number.isFinite(current)) return;
+  const target = Math.max(1, Number(current) + Number(delta));
+  reorderQueue(runId, target);
+}
+
+function setQueuePos(runId) {
+  const input = document.getElementById(`queue-pos-${runId}`);
+  if (!input) return;
+  const value = Number(input.value);
+  if (!Number.isFinite(value)) return;
+  reorderQueue(runId, value);
+}
 
 async function openErrorDetails(runId, runName = "") {
   try {

@@ -535,6 +535,16 @@ def ensure_tables(conn: sqlite3.Connection) -> None:
         );
         """
     )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS QueueItem (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            runId TEXT UNIQUE NOT NULL,
+            position INTEGER NOT NULL,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    )
     cur.execute("CREATE INDEX IF NOT EXISTS idx_errorlog_runid_created ON ErrorLog(runId, createdAt);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_errorlog_type_created ON ErrorLog(errorType, createdAt);")
     conn.commit()
