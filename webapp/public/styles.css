@@ -506,6 +506,58 @@ textarea:focus {
 
 .autochar-layout { align-items: start; }
 .autochar-editor .field.full-width textarea { min-height: 260px; }
+.trainer-layout { align-items: start; }
+.trainer-editor .field.full-width textarea { min-height: 260px; font-family: "Space Mono", monospace; }
+.trainer-layout { grid-template-columns: minmax(200px, 0.6fr) minmax(520px, 1.4fr); }
+.trainer-list .cards { grid-template-columns: 1fr; }
+.trainer-list .card { padding: 8px 10px; border-radius: 10px; }
+.trainer-list .card .label { font-size: 10px; }
+.trainer-form-head { display: grid; grid-template-columns: minmax(260px, 1.1fr) minmax(280px, 1fr); gap: 14px; align-items: end; }
+.trainer-form-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.trainer-form-tools { display: grid; gap: 8px; justify-items: end; }
+.trainer-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.trainer-actions .btn { padding: 6px 10px; }
+.trainer-toggles { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+.trainer-editor .status-msg { margin-top: 8px; }
+#train-profile-form.form.compact {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#train-profile-form .settings-grid { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+#train-profile-form .setting-row { align-items: start; grid-template-columns: 1fr auto; }
+#train-profile-form .setting-row input,
+#train-profile-form .setting-row select {
+  width: 220px;
+  max-width: none;
+}
+#train-profile-form .setting-row input[type="text"] {
+  width: 286px;
+  max-width: none;
+}
+#train-profile-form .setting-inputs {
+  display: grid;
+  gap: 6px;
+  justify-self: end;
+  justify-items: start;
+  width: 100%;
+  max-width: 220px;
+}
+#train-profile-form .setting-inputs-wide {
+  max-width: 320px;
+}
+#train-profile-form .setting-inputs label {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  width: 100%;
+}
+#train-profile-form .setting-inputs .inline {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-start;
+}
 
 .pill { padding: 6px 10px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border); }
 .pill-running { background: rgba(213,140,63,0.16); color: var(--accent); border-color: rgba(213,140,63,0.5); }

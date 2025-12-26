@@ -2,6 +2,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wireNavigation();
   wireUploadForm();
   wireAutocharForm();
+  wireTrainProfileEditor();
   wireSettings();
   wireManualEditor();
   refreshSystemStatus();
@@ -18,6 +19,62 @@ document.addEventListener("DOMContentLoaded", () => {
   setActiveSection(initial);
   if (initial === "autochar") refreshAutochar();
 });
+
+const TRAINER_KEYS = [
+  "trainer_base_model",
+  "trainer_vae",
+  "trainer_resolution",
+  "trainer_batch_size",
+  "trainer_grad_accum",
+  "trainer_epochs",
+  "trainer_max_train_steps",
+  "trainer_learning_rate",
+  "trainer_te_learning_rate",
+  "trainer_lr_scheduler",
+  "trainer_lr_warmup_steps",
+  "trainer_lora_rank",
+  "trainer_lora_alpha",
+  "trainer_te_lora_rank",
+  "trainer_te_lora_alpha",
+  "trainer_clip_skip",
+  "trainer_network_dropout",
+  "trainer_caption_dropout",
+  "trainer_shuffle_caption",
+  "trainer_keep_tokens",
+  "trainer_min_snr_gamma",
+  "trainer_noise_offset",
+  "trainer_weight_decay",
+  "trainer_sample_prompt_1",
+  "trainer_sample_prompt_2",
+  "trainer_sample_prompt_3",
+  "trainer_bucket_min_reso",
+  "trainer_bucket_max_reso",
+  "trainer_bucket_step",
+  "trainer_optimizer",
+  "trainer_use_8bit_adam",
+  "trainer_gradient_checkpointing",
+  "trainer_dataloader_workers",
+  "trainer_use_prodigy",
+  "trainer_max_grad_norm",
+];
+
+const SETTINGS_KEYS = [
+  "capping_fps",
+  "capping_jpeg_quality",
+  "selection_target_per_character",
+  "selection_face_quota",
+  "selection_hamming_threshold",
+  "selection_hamming_relaxed",
+  "autotag_general_threshold",
+  "autotag_character_threshold",
+  "autotag_max_tags",
+  "output_max_images",
+  "hf_token",
+  "autotag_model_id",
+  ...TRAINER_KEYS,
+];
+
+let trainProfileCache = [];
 
 async function loadData() {
   await Promise.all([refreshQueue(), refreshHistory()]);
@@ -413,28 +470,249 @@ function wireUploadForm() {
 
 async function loadTrainProfiles() {
   const select = document.getElementById("train-profile");
-  if (!select) return;
-  select.innerHTML = "";
+  const list = document.getElementById("train-profile-list");
+  if (select) select.innerHTML = "";
   try {
     const res = await fetch("/api/train-profiles");
     if (!res.ok) throw new Error("failed to load train profiles");
     const data = await res.json();
     const profiles = data.profiles || [];
-    if (!profiles.length) {
-      select.innerHTML = '<option value="">(no profiles)</option>';
+    trainProfileCache = profiles;
+    if (select) {
+      if (!profiles.length) {
+        select.innerHTML = '<option value="">(no profiles)</option>';
+      } else {
+        const defaultProfile = profiles.find((p) => p.isDefault) || profiles[0];
+        profiles.forEach((p) => {
+          const opt = document.createElement("option");
+          opt.value = p.name;
+          opt.textContent = p.label ? `${p.name} — ${p.label}` : p.name;
+          if (defaultProfile && p.name === defaultProfile.name) opt.selected = true;
+          select.appendChild(opt);
+        });
+      }
+    }
+    if (list) {
+      renderTrainProfileList(profiles);
+      const fallback = profiles.find((p) => p.isDefault) || profiles[0];
+      if (fallback && (!activeTrainProfile || activeTrainProfile.id !== fallback.id)) {
+        setActiveTrainProfile(fallback);
+      }
+    }
+  } catch (_err) {
+    if (select) select.innerHTML = '<option value="">(failed to load)</option>';
+  }
+}
+
+function fillTrainerSettings(settings) {
+  TRAINER_KEYS.forEach((key) => {
+    const input = document.getElementById(`setting-${key}`);
+    if (!input) return;
+    const val = settings[key];
+    if (val === undefined || val === null) return;
+    if (input.type === "checkbox") {
+      input.checked = String(val).toLowerCase() === "true" || val === true || val === 1;
+    } else {
+      input.value = val;
+    }
+  });
+}
+
+function collectTrainerSettings() {
+  const payload = {};
+  TRAINER_KEYS.forEach((key) => {
+    const input = document.getElementById(`setting-${key}`);
+    if (!input) return;
+    if (input.type === "checkbox") {
+      payload[key] = input.checked;
+    } else {
+      const val = input.value;
+      const num = Number(val);
+      payload[key] = Number.isFinite(num) ? num : val;
+    }
+  });
+  return payload;
+}
+
+function renderTrainProfileList(profiles) {
+  const list = document.getElementById("train-profile-list");
+  if (!list) return;
+  if (!profiles.length) {
+    list.innerHTML = '<div class="card empty"><p>No train profiles found.</p></div>';
+    return;
+  }
+  list.innerHTML = profiles
+    .map((p) => {
+      const badge = p.isDefault ? '<span class="pill">default</span>' : '';
+      const label = p.label ? `<div class="muted small">${p.label}</div>` : '';
+      return `
+        <div class="card" data-id="${p.id}">
+          <div class="card-head">
+            <div>
+              <div class="label">${p.name}</div>
+              ${label}
+            </div>
+            ${badge}
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+  list.querySelectorAll(".card[data-id]").forEach((card) => {
+    card.addEventListener("click", () => {
+      const id = Number(card.getAttribute("data-id"));
+      const profile = trainProfileCache.find((p) => p.id === id);
+      if (profile) setActiveTrainProfile(profile);
+    });
+  });
+}
+
+let activeTrainProfile = null;
+let activeTrainProfileExtras = {};
+
+function setActiveTrainProfile(profile) {
+  const form = document.getElementById("train-profile-form");
+  if (!form) return;
+  const idInput = form.querySelector('input[name="id"]');
+  const nameInput = form.querySelector('input[name="name"]');
+  const labelInput = form.querySelector('input[name="label"]');
+  const defaultToggle = document.getElementById("train-profile-default");
+  const jsonText = document.getElementById("train-profile-json-text");
+  activeTrainProfile = profile;
+  activeTrainProfileExtras = {};
+  if (idInput) idInput.value = profile?.id ? String(profile.id) : "";
+  if (nameInput) nameInput.value = profile?.name || "";
+  if (labelInput) labelInput.value = profile?.label || "";
+  if (defaultToggle) defaultToggle.checked = !!profile?.isDefault;
+  const settings = profile?.settings && typeof profile.settings === "object" ? profile.settings : {};
+  Object.keys(settings).forEach((key) => {
+    if (!TRAINER_KEYS.includes(key)) activeTrainProfileExtras[key] = settings[key];
+  });
+  fillTrainerSettings(settings);
+  if (jsonText) {
+    jsonText.value = JSON.stringify(settings, null, 2);
+  }
+}
+
+function wireTrainProfileEditor() {
+  const form = document.getElementById("train-profile-form");
+  if (!form) return;
+  const msgEl = document.getElementById("train-profile-msg");
+  const resetBtn = document.getElementById("train-profile-reset");
+  const deleteBtn = document.getElementById("train-profile-delete");
+  const advancedToggle = document.getElementById("train-profile-advanced");
+  const jsonWrap = document.getElementById("train-profile-json");
+  const fieldsWrap = document.getElementById("train-profile-fields");
+  const jsonText = document.getElementById("train-profile-json-text");
+
+  const setMsg = (text, cls = "") => {
+    if (!msgEl) return;
+    msgEl.textContent = text;
+    msgEl.className = `status-msg ${cls}`;
+  };
+
+  const toggleAdvanced = (force) => {
+    if (!advancedToggle || !jsonWrap || !fieldsWrap || !jsonText) return;
+    const next = force !== undefined ? force : advancedToggle.checked;
+    if (next) {
+      const merged = { ...activeTrainProfileExtras, ...collectTrainerSettings() };
+      jsonText.value = JSON.stringify(merged, null, 2);
+      jsonWrap.classList.remove("hidden");
+      fieldsWrap.classList.add("hidden");
+      advancedToggle.checked = true;
+    } else {
+      try {
+        const parsed = JSON.parse(jsonText.value || "{}");
+        fillTrainerSettings(parsed);
+        activeTrainProfileExtras = {};
+        Object.keys(parsed || {}).forEach((key) => {
+          if (!TRAINER_KEYS.includes(key)) activeTrainProfileExtras[key] = parsed[key];
+        });
+        jsonWrap.classList.add("hidden");
+        fieldsWrap.classList.remove("hidden");
+        advancedToggle.checked = false;
+      } catch (err) {
+        setMsg("Invalid JSON", "error");
+        advancedToggle.checked = true;
+      }
+    }
+  };
+
+  if (advancedToggle) {
+    advancedToggle.addEventListener("change", () => toggleAdvanced());
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    setMsg("Saving...");
+    const id = form.querySelector('input[name="id"]')?.value || "";
+    const name = form.querySelector('input[name="name"]')?.value || "";
+    const label = form.querySelector('input[name="label"]')?.value || "";
+    const isDefault = document.getElementById("train-profile-default")?.checked || false;
+    let settingsObj = {};
+    try {
+      if (advancedToggle?.checked) {
+        settingsObj = JSON.parse(jsonText?.value || "{}");
+      } else {
+        settingsObj = { ...activeTrainProfileExtras, ...collectTrainerSettings() };
+      }
+    } catch (err) {
+      setMsg("Invalid JSON", "error");
       return;
     }
-    const defaultProfile = profiles.find((p) => p.isDefault) || profiles[0];
-    profiles.forEach((p) => {
-      const opt = document.createElement("option");
-      opt.value = p.name;
-      opt.textContent = p.label ? `${p.name} — ${p.label}` : p.name;
-      if (defaultProfile && p.name === defaultProfile.name) opt.selected = true;
-      select.appendChild(opt);
+    try {
+      const res = await fetch(id ? `/api/train-profiles/${id}` : "/api/train-profiles", {
+        method: id ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, label, settings: settingsObj, isDefault }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Save failed");
+      await loadTrainProfiles();
+      const saved = data.profile;
+      if (saved) setActiveTrainProfile(saved);
+      setMsg("Saved", "ok");
+    } catch (err) {
+      setMsg(err.message || "Save failed", "error");
+    }
+  });
+
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      form.querySelector('input[name="id"]').value = "";
+      form.querySelector('input[name="name"]').value = "";
+      form.querySelector('input[name="label"]').value = "";
+      const defaultToggle = document.getElementById("train-profile-default");
+      if (defaultToggle) defaultToggle.checked = false;
+      activeTrainProfile = null;
+      activeTrainProfileExtras = {};
+      if (advancedToggle?.checked) {
+        jsonText.value = JSON.stringify(collectTrainerSettings(), null, 2);
+      }
+      setMsg("");
     });
-  } catch (_err) {
-    select.innerHTML = '<option value="">(failed to load)</option>';
   }
+
+  if (deleteBtn) {
+    deleteBtn.addEventListener("click", async () => {
+      const id = form.querySelector('input[name="id"]')?.value || "";
+      if (!id) return;
+      if (!confirm("Delete this train profile?")) return;
+      setMsg("Deleting...");
+      try {
+        const res = await fetch(`/api/train-profiles/${id}`, { method: "DELETE" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Delete failed");
+        await loadTrainProfiles();
+        resetBtn?.click();
+        setMsg("Deleted", "ok");
+      } catch (err) {
+        setMsg(err.message || "Delete failed", "error");
+      }
+    });
+  }
+
+  toggleAdvanced(false);
 }
 
 function wireSettings() {
@@ -459,56 +737,7 @@ function wireSettings() {
   const taggerDefaultDisplay = document.getElementById("tagger-default");
   const taggerPresetSelect = document.getElementById("tagger-preset");
   const taggerPresetStatus = document.getElementById("tagger-preset-status");
-  const ids = [
-    "capping_fps",
-    "capping_jpeg_quality",
-    "selection_target_per_character",
-    "selection_face_quota",
-    "selection_hamming_threshold",
-    "selection_hamming_relaxed",
-    "autotag_general_threshold",
-    "autotag_character_threshold",
-    "autotag_max_tags",
-    "output_max_images",
-    "hf_token",
-    "autotag_model_id",
-    // trainer settings
-    "trainer_base_model",
-    "trainer_vae",
-    "trainer_resolution",
-    "trainer_batch_size",
-    "trainer_grad_accum",
-    "trainer_epochs",
-    "trainer_max_train_steps",
-    "trainer_learning_rate",
-    "trainer_te_learning_rate",
-    "trainer_lr_scheduler",
-    "trainer_lr_warmup_steps",
-    "trainer_lora_rank",
-    "trainer_lora_alpha",
-    "trainer_te_lora_rank",
-    "trainer_te_lora_alpha",
-    "trainer_clip_skip",
-    "trainer_network_dropout",
-    "trainer_caption_dropout",
-    "trainer_shuffle_caption",
-    "trainer_keep_tokens",
-    "trainer_min_snr_gamma",
-    "trainer_noise_offset",
-    "trainer_weight_decay",
-    "trainer_sample_prompt_1",
-    "trainer_sample_prompt_2",
-    "trainer_sample_prompt_3",
-    "trainer_bucket_min_reso",
-    "trainer_bucket_max_reso",
-    "trainer_bucket_step",
-    "trainer_optimizer",
-    "trainer_use_8bit_adam",
-    "trainer_gradient_checkpointing",
-    "trainer_dataloader_workers",
-    "trainer_use_prodigy",
-    "trainer_max_grad_norm",
-  ];
+  const ids = SETTINGS_KEYS;
   const settingsCache = {};
 
   const setMsg = (text, cls = "") => {

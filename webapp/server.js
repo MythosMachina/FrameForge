@@ -34,6 +34,7 @@ const STAGING_DIR = path.join(STORAGE_ROOT, 'staging');
 const OUTPUT_DIR = path.join(BUNDLE_ROOT, 'ARCHIVE', 'zips');
 const TAGGER_MODELS_DIR = path.join(SYSTEM_ROOT, 'webapp', 'tagger_models');
 const LOG_DIR = path.join(__dirname, 'logs');
+const WORKER_STALE_SECS = 30;
 const DOCS_DIR = path.join(BUNDLE_ROOT, 'docs');
 const INSITE_DOCS_DIR = path.join(BUNDLE_ROOT, 'insite-docs');
 const INPUT_ROOT = path.join(BUNDLE_ROOT, 'INBOX');
@@ -104,6 +105,20 @@ function asBool(val, defaultVal = false) {
 
 function normalizeTrainProfileName(val) {
   return String(val || '').toLowerCase().trim();
+}
+
+function normalizeTrainProfileSettings(input) {
+  if (!input) return {};
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (err) {
+      throw new Error('invalid settings JSON');
+    }
+  }
+  if (typeof input === 'object') return input;
+  return {};
 }
 
 async function getTrainProfiles() {
@@ -422,13 +437,85 @@ app.get('/api/train-profiles', async (_req, res) => {
   }
 });
 
-function mapServiceState(roleState, hasQueue) {
-  const s = String(roleState || "").toLowerCase();
+app.post('/api/train-profiles', async (req, res) => {
+  try {
+    const { name, label = '', settings = {}, isDefault = false } = req.body || {};
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'name is required' });
+    const normalized = String(name).trim().toLowerCase();
+    const settingsObj = normalizeTrainProfileSettings(settings);
+    if (isDefault) {
+      await dbExec("UPDATE TrainProfile SET isDefault=0", []);
+    }
+    await dbExec(
+      "INSERT INTO TrainProfile (name, label, settings, isDefault, createdAt, updatedAt) " +
+        "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+      [normalized, String(label || ''), JSON.stringify(settingsObj), isDefault ? 1 : 0]
+    );
+    const rows = await dbQuery("SELECT id, name, label, settings, isDefault FROM TrainProfile WHERE name=?", [normalized]);
+    const created = rows?.[0] || null;
+    res.json({ ok: true, profile: created ? { ...created, settings: settingsObj } : null });
+  } catch (err) {
+    console.error('[train-profiles:create] failed', err);
+    res.status(500).json({ error: err.message || 'failed to create train profile' });
+  }
+});
+
+app.put('/api/train-profiles/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'invalid id' });
+    const { name, label = '', settings = {}, isDefault = false } = req.body || {};
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'name is required' });
+    const normalized = String(name).trim().toLowerCase();
+    const settingsObj = normalizeTrainProfileSettings(settings);
+    if (isDefault) {
+      await dbExec("UPDATE TrainProfile SET isDefault=0", []);
+    }
+    await dbExec(
+      "UPDATE TrainProfile SET name=?, label=?, settings=?, isDefault=?, updatedAt=CURRENT_TIMESTAMP WHERE id=?",
+      [normalized, String(label || ''), JSON.stringify(settingsObj), isDefault ? 1 : 0, id]
+    );
+    const rows = await dbQuery("SELECT id, name, label, settings, isDefault FROM TrainProfile WHERE id=?", [id]);
+    const updated = rows?.[0] || null;
+    res.json({ ok: true, profile: updated ? { ...updated, settings: settingsObj } : null });
+  } catch (err) {
+    console.error('[train-profiles:update] failed', err);
+    res.status(500).json({ error: err.message || 'failed to update train profile' });
+  }
+});
+
+app.delete('/api/train-profiles/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'invalid id' });
+    await dbExec("DELETE FROM TrainProfile WHERE id=?", [id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[train-profiles:delete] failed', err);
+    res.status(500).json({ error: 'failed to delete train profile' });
+  }
+});
+
+function isWorkerStale(role) {
+  if (!role || role.heartbeat === undefined || role.heartbeat === null) return true;
+  const age = Math.floor(Date.now() / 1000) - Number(role.heartbeat);
+  return Number.isFinite(age) ? age > WORKER_STALE_SECS : true;
+}
+
+function mapServiceState(role, hasQueue) {
+  if (!role || isWorkerStale(role)) return "Fail";
+  const s = String(role.state || "").toLowerCase();
   if (s === "error" || s === "stopped" || s === "paused") return "Fail";
   if (s === "busy") return "Busy";
   if (hasQueue) return "Waiting";
   if (s === "ready" || s === "idle" || s === "blocked" || !s) return "OK";
   return "OK";
+}
+
+function roleStatusMessage(role) {
+  if (!role) return "offline";
+  if (isWorkerStale(role)) return "stale heartbeat";
+  return role.message || "";
 }
 
 app.get('/api/system/status', async (_req, res) => {
@@ -443,18 +530,18 @@ app.get('/api/system/status', async (_req, res) => {
       { name: "WebApp", state: "OK", message: mode === "paused" ? "Queue paused" : "" },
       {
         name: "Initiator",
-        state: mapServiceState(roles?.initiator?.state, queued > 0),
-        message: roles?.initiator?.message || "",
+        state: mapServiceState(roles?.initiator, queued > 0),
+        message: roleStatusMessage(roles?.initiator),
       },
       {
         name: "Orchestrator",
-        state: mapServiceState(roles?.orchestrator?.state, queuedInitiated > 0),
-        message: roles?.orchestrator?.message || "",
+        state: mapServiceState(roles?.orchestrator, queuedInitiated > 0),
+        message: roleStatusMessage(roles?.orchestrator),
       },
       {
         name: "Finisher",
-        state: mapServiceState(roles?.finisher?.state, readyFinish > 0),
-        message: roles?.finisher?.message || "",
+        state: mapServiceState(roles?.finisher, readyFinish > 0),
+        message: roleStatusMessage(roles?.finisher),
       },
     ];
     res.json({ services, queueMode: mode });

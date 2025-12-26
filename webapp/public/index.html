@@ -24,12 +24,12 @@
         <a href="#queue">Dashboard</a>
         <a href="#upload">Upload</a>
         <a href="#autochar">AutoChar</a>
+        <a href="#trainer">Trainer</a>
         <a href="#docs">Documentation</a>
         <a href="#settings">Settings</a>
-        <a href="#system">System Status</a>
       </nav>
       <button class="status-pill" id="system-status-pill" onclick="location.hash='#system'">
-        <span class="dot dot-green"></span> <span class="orch-label">System</span>
+        <span class="dot dot-green"></span> <span class="orch-label">System Status</span>
       </button>
     </header>
 
@@ -283,7 +283,6 @@
           <div class="settings-tabs">
             <button class="tab active" data-tab="settings-main">Settings</button>
             <button class="tab" data-tab="settings-tagger">Tagger Model Changer</button>
-            <button class="tab" data-tab="settings-trainer">Trainer</button>
           </div>
           <p>Pipeline knobs (stored in DB). Applied on next run; Launch uses current values.</p>
         </div>
@@ -536,6 +535,234 @@
           </div>
         </div>
       </section>
+
+      <section data-section="trainer" class="panel hidden">
+        <div class="panel-header">
+          <h2>Trainer</h2>
+          <p>Edit train profiles stored in the DB. Profiles override trainer defaults at run time.</p>
+        </div>
+        <div class="grid-2 trainer-layout">
+          <div class="trainer-list">
+            <h3 class="subhead">Profiles</h3>
+            <div id="train-profile-list" class="cards"></div>
+          </div>
+          <div class="trainer-editor">
+            <h3 class="subhead">Create / Edit</h3>
+            <form id="train-profile-form" class="form compact">
+              <input type="hidden" name="id" value="">
+              <div class="trainer-form-head">
+                <div class="trainer-form-fields">
+                  <label class="field">
+                    <span>Name</span>
+                    <input type="text" name="name" required placeholder="e.g. balanced">
+                  </label>
+                  <label class="field">
+                    <span>Label</span>
+                    <input type="text" name="label" placeholder="optional">
+                  </label>
+                </div>
+                <div class="trainer-form-tools">
+                  <div class="trainer-toggles">
+                    <label class="field inline">
+                      <input type="checkbox" id="train-profile-default">
+                      <span>Set as default profile</span>
+                    </label>
+                    <label class="field inline">
+                      <input type="checkbox" id="train-profile-advanced">
+                      <span>Advanced JSON</span>
+                    </label>
+                  </div>
+                  <div class="actions trainer-actions">
+                    <button type="submit" class="btn primary">Save</button>
+                    <button type="button" id="train-profile-reset" class="btn ghost">New</button>
+                    <button type="button" id="train-profile-delete" class="btn ghost">Delete</button>
+                  </div>
+                </div>
+              </div>
+              <div class="status-msg" id="train-profile-msg"></div>
+              <div id="train-profile-fields">
+                <div class="settings-grid">
+                  <div class="setting-group">
+                    <div class="group-head">
+                      <span>Trainer (SDXL LoRA)</span>
+                      <span class="info" data-tip="Trainer hyperparameters (from DB).">i</span>
+                    </div>
+                    <label class="setting-row">
+                      <div><div class="name">Base model</div></div>
+                      <input type="text" id="setting-trainer_base_model">
+                    </label>
+                    <label class="setting-row">
+                      <div><div class="name">VAE</div></div>
+                      <input type="text" id="setting-trainer_vae">
+                    </label>
+                    <label class="setting-row">
+                      <div><div class="name">Resolution</div></div>
+                      <input type="number" id="setting-trainer_resolution" min="512" max="1536" step="64">
+                    </label>
+                    <label class="setting-row">
+                      <div><div class="name">Batch size</div></div>
+                      <input type="number" id="setting-trainer_batch_size" min="1" max="8" step="1">
+                    </label>
+                    <label class="setting-row">
+                      <div><div class="name">Grad accum</div></div>
+                      <input type="number" id="setting-trainer_grad_accum" min="1" max="16" step="1">
+                    </label>
+                    <label class="setting-row">
+                      <div><div class="name">Epochs</div></div>
+                      <input type="number" id="setting-trainer_epochs" min="1" max="200" step="1">
+                    </label>
+                    <label class="setting-row">
+                      <div><div class="name">Max steps</div></div>
+                      <input type="number" id="setting-trainer_max_train_steps" min="0" step="100">
+                    </label>
+            <label class="setting-row">
+              <div><div class="name">LR / TE LR</div></div>
+              <div class="setting-inputs setting-inputs-stack">
+                <label>
+                  <span class="muted small">LR</span>
+                  <input type="number" id="setting-trainer_learning_rate" step="0.00001">
+                </label>
+                <label>
+                  <span class="muted small">TE LR</span>
+                  <input type="number" id="setting-trainer_te_learning_rate" step="0.00001">
+                </label>
+              </div>
+            </label>
+                    <label class="setting-row">
+                      <div><div class="name">Scheduler</div></div>
+                      <select id="setting-trainer_lr_scheduler">
+                        <option value="cosine">cosine</option>
+                        <option value="constant">constant</option>
+                      </select>
+                    </label>
+                    <label class="setting-row">
+                      <div><div class="name">Warmup steps</div></div>
+                      <input type="number" id="setting-trainer_lr_warmup_steps" min="0" step="10">
+                    </label>
+            <label class="setting-row">
+              <div><div class="name">Ranks (UNet / TE)</div></div>
+              <div class="setting-inputs setting-inputs-stack">
+                <label>
+                  <span class="muted small">UNet</span>
+                  <input type="number" id="setting-trainer_lora_rank" min="1" max="128" step="1">
+                </label>
+                <label>
+                  <span class="muted small">TE</span>
+                  <input type="number" id="setting-trainer_te_lora_rank" min="1" max="128" step="1">
+                </label>
+              </div>
+            </label>
+                    <label class="setting-row">
+                      <div><div class="name">Clip skip</div></div>
+                      <input type="number" id="setting-trainer_clip_skip" min="1" max="4" step="1">
+                    </label>
+            <label class="setting-row">
+              <div><div class="name">Min SNR / Noise offset</div></div>
+              <div class="setting-inputs setting-inputs-stack">
+                <label>
+                  <span class="muted small">Min SNR</span>
+                  <input type="number" id="setting-trainer_min_snr_gamma" step="0.1">
+                </label>
+                <label>
+                  <span class="muted small">Noise offset</span>
+                  <input type="number" id="setting-trainer_noise_offset" step="0.001">
+                </label>
+              </div>
+            </label>
+                    <label class="setting-row">
+                      <div><div class="name">Weight decay</div></div>
+                      <input type="number" id="setting-trainer_weight_decay" step="0.001">
+                    </label>
+            <label class="setting-row">
+              <div><div class="name">Buckets (min / max / step)</div></div>
+              <div class="setting-inputs setting-inputs-stack setting-inputs-wide">
+                <label>
+                  <span class="muted small">Min</span>
+                  <input type="number" id="setting-trainer_bucket_min_reso" step="16">
+                </label>
+                <label>
+                  <span class="muted small">Max</span>
+                  <input type="number" id="setting-trainer_bucket_max_reso" step="16">
+                </label>
+                <label>
+                  <span class="muted small">Step</span>
+                  <input type="number" id="setting-trainer_bucket_step" step="16">
+                </label>
+              </div>
+            </label>
+            <label class="setting-row">
+              <div><div class="name">Caption options</div></div>
+              <div class="setting-inputs setting-inputs-stack setting-inputs-wide">
+                <label class="inline"><input type="checkbox" id="setting-trainer_shuffle_caption"> shuffle</label>
+                <label>
+                  <span class="muted small">Keep tokens</span>
+                  <input type="number" id="setting-trainer_keep_tokens" min="0" max="10" step="1">
+                </label>
+                <label>
+                  <span class="muted small">Caption dropout</span>
+                  <input type="number" id="setting-trainer_caption_dropout" step="0.01" min="0" max="1">
+                </label>
+              </div>
+            </label>
+            <label class="setting-row">
+              <div>
+                <div class="name">Sample prompts</div>
+                <div class="muted small">Trigger is prepended automatically.</div>
+              </div>
+              <div class="setting-inputs setting-inputs-stack setting-inputs-wide">
+                <label>
+                  <span class="muted small">Prompt 1</span>
+                  <input type="text" id="setting-trainer_sample_prompt_1" placeholder="front view">
+                </label>
+                <label>
+                  <span class="muted small">Prompt 2</span>
+                  <input type="text" id="setting-trainer_sample_prompt_2" placeholder="face close up">
+                </label>
+                <label>
+                  <span class="muted small">Prompt 3</span>
+                  <input type="text" id="setting-trainer_sample_prompt_3" placeholder="sitting, smile">
+                </label>
+              </div>
+            </label>
+                    <label class="setting-row">
+                      <div><div class="name">Network dropout</div></div>
+                      <input type="number" id="setting-trainer_network_dropout" step="0.01" min="0" max="1">
+                    </label>
+            <label class="setting-row">
+              <div><div class="name">Optimizer</div></div>
+              <div class="setting-inputs setting-inputs-stack setting-inputs-wide">
+                <label>
+                  <span class="muted small">Type</span>
+                  <input type="text" id="setting-trainer_optimizer">
+                </label>
+                <label class="inline"><input type="checkbox" id="setting-trainer_use_8bit_adam"> use 8bit Adam</label>
+                <label class="inline"><input type="checkbox" id="setting-trainer_use_prodigy"> use Prodigy</label>
+              </div>
+            </label>
+            <label class="setting-row">
+              <div><div class="name">Grad checkpoint / Max grad norm</div></div>
+              <div class="setting-inputs setting-inputs-stack setting-inputs-wide">
+                <label class="inline"><input type="checkbox" id="setting-trainer_gradient_checkpointing"> grad checkpoint</label>
+                <label>
+                  <span class="muted small">Max grad norm</span>
+                  <input type="number" id="setting-trainer_max_grad_norm" step="0.1" min="0">
+                </label>
+              </div>
+            </label>
+                  </div>
+                </div>
+              </div>
+              <div id="train-profile-json" class="hidden">
+                <label class="field full-width">
+                  <span>Settings JSON</span>
+                  <textarea id="train-profile-json-text" rows="14" spellcheck="false"></textarea>
+                  <div class="muted small">Advanced users can edit the raw JSON overrides here.</div>
+                </label>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
   <div class="corner-hover">
@@ -548,115 +775,3 @@
   <script src="/app.js"></script>
 </body>
 </html>
-
-
-        <div class="settings-tab hidden" data-tab-panel="settings-trainer">
-          <div class="settings-grid">
-            <div class="setting-group">
-              <div class="group-head">
-                <span>Trainer (SDXL LoRA)</span>
-                <span class="info" data-tip="Trainer hyperparameters (from DB).">i</span>
-              </div>
-              <label class="setting-row">
-                <div><div class="name">Base model</div></div>
-                <input type="text" id="setting-trainer_base_model">
-              </label>
-              <label class="setting-row">
-                <div><div class="name">VAE</div></div>
-                <input type="text" id="setting-trainer_vae">
-              </label>
-              <label class="setting-row">
-                <div><div class="name">Resolution</div></div>
-                <input type="number" id="setting-trainer_resolution" min="512" max="1536" step="64">
-              </label>
-              <label class="setting-row">
-                <div><div class="name">Batch size</div></div>
-                <input type="number" id="setting-trainer_batch_size" min="1" max="8" step="1">
-              </label>
-              <label class="setting-row">
-                <div><div class="name">Grad accum</div></div>
-                <input type="number" id="setting-trainer_grad_accum" min="1" max="16" step="1">
-              </label>
-              <label class="setting-row">
-                <div><div class="name">Epochs</div></div>
-                <input type="number" id="setting-trainer_epochs" min="1" max="200" step="1">
-              </label>
-              <label class="setting-row">
-                <div><div class="name">Max steps</div></div>
-                <input type="number" id="setting-trainer_max_train_steps" min="0" step="100">
-              </label>
-              <label class="setting-row">
-                <div><div class="name">LR / TE LR</div></div>
-                <input type="number" id="setting-trainer_learning_rate" step="0.00001">
-                <input type="number" id="setting-trainer_te_learning_rate" step="0.00001">
-              </label>
-              <label class="setting-row">
-                <div><div class="name">Scheduler</div></div>
-                <select id="setting-trainer_lr_scheduler">
-                  <option value="cosine">cosine</option>
-                  <option value="constant">constant</option>
-                </select>
-              </label>
-              <label class="setting-row">
-                <div><div class="name">Warmup steps</div></div>
-                <input type="number" id="setting-trainer_lr_warmup_steps" min="0" step="10">
-              </label>
-              <label class="setting-row">
-                <div><div class="name">Ranks (UNet / TE)</div></div>
-                <input type="number" id="setting-trainer_lora_rank" min="1" max="128" step="1">
-                <input type="number" id="setting-trainer_te_lora_rank" min="1" max="128" step="1">
-              </label>
-              <label class="setting-row">
-                <div><div class="name">Clip skip</div></div>
-                <input type="number" id="setting-trainer_clip_skip" min="1" max="4" step="1">
-              </label>
-              <label class="setting-row">
-                <div><div class="name">Min SNR / Noise offset</div></div>
-                <input type="number" id="setting-trainer_min_snr_gamma" step="0.1">
-                <input type="number" id="setting-trainer_noise_offset" step="0.001">
-              </label>
-              <label class="setting-row">
-                <div><div class="name">Weight decay</div></div>
-                <input type="number" id="setting-trainer_weight_decay" step="0.001">
-              </label>
-              <label class="setting-row">
-                <div><div class="name">Buckets (min / max / step)</div></div>
-                <input type="number" id="setting-trainer_bucket_min_reso" step="16">
-                <input type="number" id="setting-trainer_bucket_max_reso" step="16">
-                <input type="number" id="setting-trainer_bucket_step" step="16">
-              </label>
-              <label class="setting-row">
-                <div><div class="name">Caption options</div></div>
-                <label class="inline"><input type="checkbox" id="setting-trainer_shuffle_caption"> shuffle</label>
-                <div class="muted small">Keep tokens</div>
-                <input type="number" id="setting-trainer_keep_tokens" min="0" max="10" step="1">
-                <div class="muted small">Caption dropout</div>
-                <input type="number" id="setting-trainer_caption_dropout" step="0.01" min="0" max="1">
-              </label>
-              <label class="setting-row">
-                <div>
-                  <div class="name">Sample prompts</div>
-                  <div class="muted small">Trigger is prepended automatically.</div>
-                </div>
-                <input type="text" id="setting-trainer_sample_prompt_1" placeholder="front view">
-                <input type="text" id="setting-trainer_sample_prompt_2" placeholder="face close up">
-                <input type="text" id="setting-trainer_sample_prompt_3" placeholder="sitting, smile">
-              </label>
-              <label class="setting-row">
-                <div><div class="name">Network dropout</div></div>
-                <input type="number" id="setting-trainer_network_dropout" step="0.01" min="0" max="1">
-              </label>
-              <label class="setting-row">
-                <div><div class="name">Optimizer</div></div>
-                <input type="text" id="setting-trainer_optimizer">
-                <label class="inline"><input type="checkbox" id="setting-trainer_use_8bit_adam"> use 8bit Adam</label>
-                <label class="inline"><input type="checkbox" id="setting-trainer_use_prodigy"> use Prodigy</label>
-              </label>
-              <label class="setting-row">
-                <div><div class="name">Grad checkpoint / Max grad norm</div></div>
-                <label class="inline"><input type="checkbox" id="setting-trainer_gradient_checkpointing"> grad checkpoint</label>
-                <input type="number" id="setting-trainer_max_grad_norm" step="0.1" min="0">
-              </label>
-            </div>
-          </div>
-        </div>
