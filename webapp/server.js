@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
-import { spawn, spawnSync } from 'child_process';
+import { execFile, spawn, spawnSync } from 'child_process';
 import unzipper from 'unzipper';
 import archiver from 'archiver';
 import { fileURLToPath } from 'url';
@@ -35,6 +35,15 @@ const OUTPUT_DIR = path.join(BUNDLE_ROOT, 'ARCHIVE', 'zips');
 const TAGGER_MODELS_DIR = path.join(SYSTEM_ROOT, 'webapp', 'tagger_models');
 const LOG_DIR = path.join(__dirname, 'logs');
 const WORKER_STALE_SECS = 30;
+const STEP_FRESH_SECS = 300;
+const SERVICE_PREFIX = path.basename(BUNDLE_ROOT).toLowerCase().includes('frameforge-dev')
+  ? 'frameforge-dev'
+  : 'frameforge';
+const SYSTEMD_SERVICES = {
+  initiator: `${SERVICE_PREFIX}-initiator.service`,
+  orchestrator: `${SERVICE_PREFIX}-orchestrator.service`,
+  finisher: `${SERVICE_PREFIX}-finisher.service`,
+};
 const DOCS_DIR = path.join(BUNDLE_ROOT, 'docs');
 const INSITE_DOCS_DIR = path.join(BUNDLE_ROOT, 'insite-docs');
 const INPUT_ROOT = path.join(BUNDLE_ROOT, 'INBOX');
@@ -105,6 +114,38 @@ function asBool(val, defaultVal = false) {
 
 function normalizeTrainProfileName(val) {
   return String(val || '').toLowerCase().trim();
+}
+
+function normalizeSystemdState(raw) {
+  const s = String(raw || '').trim().toLowerCase();
+  if (s === 'active' || s === 'activating' || s === 'reloading') return 'active';
+  if (s === 'failed') return 'failed';
+  if (s === 'inactive' || s === 'deactivating') return 'inactive';
+  return 'unknown';
+}
+
+async function getSystemdState(serviceName) {
+  return new Promise((resolve) => {
+    execFile('systemctl', ['is-active', serviceName], (err, stdout) => {
+      if (err) {
+        resolve(normalizeSystemdState(stdout));
+        return;
+      }
+      resolve(normalizeSystemdState(stdout));
+    });
+  });
+}
+
+async function hasRecentTrainProgress(thresholdSeconds = STEP_FRESH_SECS) {
+  try {
+    const rows = await dbQuery("SELECT MAX(updatedAt) AS updatedAt FROM TrainProgress", []);
+    const ts = rows?.[0]?.updatedAt;
+    if (!ts) return false;
+    const ageSec = (Date.now() - Date.parse(ts)) / 1000;
+    return Number.isFinite(ageSec) ? ageSec <= thresholdSeconds : false;
+  } catch {
+    return false;
+  }
 }
 
 function normalizeTrainProfileSettings(input) {
@@ -521,27 +562,48 @@ function roleStatusMessage(role) {
 app.get('/api/system/status', async (_req, res) => {
   try {
     const mode = await getQueueModeSetting();
-    const orch = await readOrchestratorStatus();
-    const roles = orch?.roles || {};
     const queued = await dbCountRunsByStatus('queued');
     const queuedInitiated = await dbCountRunsByStatus('queued_initiated');
     const readyFinish = await dbCountRunsByStatus('ready_for_finish');
+    const running = await dbCountRunsByStatus('running');
+    const readyToTrain = await dbCountRunsByStatus('ready_to_train');
+    const manualTagging = await dbCountRunsByStatus('manual_tagging');
+    const orchestratorWork = queuedInitiated > 0 || readyToTrain > 0 || running > 0 || manualTagging > 0;
+    const initiatorWork = queued > 0;
+    const finisherWork = readyFinish > 0;
+    const stepsFresh = await hasRecentTrainProgress();
+    const [initiatorState, orchestratorState, finisherState] = await Promise.all([
+      getSystemdState(SYSTEMD_SERVICES.initiator),
+      getSystemdState(SYSTEMD_SERVICES.orchestrator),
+      getSystemdState(SYSTEMD_SERVICES.finisher),
+    ]);
+
+    const resolveState = (systemdState, hasWork, hasSteps) => {
+      if (systemdState !== 'active') return { state: 'Fail', message: `service ${systemdState}` };
+      if (hasSteps) return { state: 'Busy', message: 'progress active' };
+      if (hasWork) return { state: 'Waiting', message: 'no recent progress' };
+      return { state: 'OK', message: 'idle' };
+    };
+
+    const initiator = resolveState(initiatorState, initiatorWork, false);
+    const orchestrator = resolveState(orchestratorState, orchestratorWork, stepsFresh);
+    const finisher = resolveState(finisherState, finisherWork, false);
     const services = [
       { name: "WebApp", state: "OK", message: mode === "paused" ? "Queue paused" : "" },
       {
         name: "Initiator",
-        state: mapServiceState(roles?.initiator, queued > 0),
-        message: roleStatusMessage(roles?.initiator),
+        state: initiator.state,
+        message: initiator.message,
       },
       {
         name: "Orchestrator",
-        state: mapServiceState(roles?.orchestrator, queuedInitiated > 0),
-        message: roleStatusMessage(roles?.orchestrator),
+        state: orchestrator.state,
+        message: orchestrator.message,
       },
       {
         name: "Finisher",
-        state: mapServiceState(roles?.finisher, readyFinish > 0),
-        message: roleStatusMessage(roles?.finisher),
+        state: finisher.state,
+        message: finisher.message,
       },
     ];
     res.json({ services, queueMode: mode });
