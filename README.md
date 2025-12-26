@@ -9,12 +9,19 @@ End-to-end dataset and LoRA training pipeline that turns ZIP uploads into clean,
 > FrameForge is designed for fictional, stylized, and synthetic content.  
 > Use on real individuals without consent is explicitly discouraged.
 
->Importrant Notice: FrameForge is currently only for PonyXL Training calibrated. More will follow if Demand comes.
+>Important Notice: FrameForge is currently only for PonyXL training calibrated. More will follow if demand comes.
 
 ## Features
-- Pipeline stages: import → select → crop → tag → (optional) train → package.
+- Pipeline stages: import → select → crop → tag → train → package.
+- Dataset flow: ZIP ingest → capping → selection → crop/flip → autotag → manual tag editing → finalize dataset.
+- Training flow: profile-driven configs → run monitoring → LoRA packaging + sample previews.
 - Orchestrated services: initiator, orchestrator, finisher, DB broker, webapp.
-- Web UI for uploads, queue monitoring, manual tagging, and downloads.
+- Web UI for uploads, queue monitoring, manual tagging, downloads, and train profile editor.
+- Queue management with reorderable queued runs.
+- Preview generation and result browsing in the UI.
+- AutoChar presets with online selection and filtering.
+- System status view with service health and progress signals.
+- Structured error logging with per-run details in the UI.
 - Training integration with ([**Kohya_ss** scripts](https://github.com/kohya-ss/sd-scripts)).
 
 Support and Questions -> Discord
