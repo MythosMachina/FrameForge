@@ -202,11 +202,24 @@ async function getSystemdState(serviceName) {
 
 async function hasRecentTrainProgress(thresholdSeconds = STEP_FRESH_SECS) {
   try {
-    const rows = await dbQuery("SELECT MAX(updatedAt) AS updatedAt FROM TrainProgress", []);
-    const ts = rows?.[0]?.updatedAt;
-    if (!ts) return false;
-    const ageSec = (Date.now() - Date.parse(ts)) / 1000;
-    return Number.isFinite(ageSec) ? ageSec <= thresholdSeconds : false;
+    const runs = await dbQuery(
+      "SELECT runId, lastStep FROM Run WHERE status='running' ORDER BY startedAt DESC",
+      []
+    );
+    if (!runs || !runs.length) return false;
+    const runIds = runs.map((r) => r.runId);
+    const progressMap = await readTrainProgress(runIds);
+    const now = Date.now();
+    for (const run of runs) {
+      const progress = progressMap[run.runId];
+      if (progress?.updatedAt) {
+        const ageSec = (now - Date.parse(progress.updatedAt)) / 1000;
+        if (Number.isFinite(ageSec) && ageSec <= thresholdSeconds) return true;
+      }
+      const lastStep = String(run.lastStep || "");
+      if (lastStep.toLowerCase().startsWith("train_progress")) return true;
+    }
+    return false;
   } catch {
     return false;
   }
