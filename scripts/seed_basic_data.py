@@ -516,6 +516,27 @@ def ensure_tables(conn: sqlite3.Connection) -> None:
         );
         """
     )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ErrorLog (
+            id INTEGER PRIMARY KEY,
+            runId TEXT,
+            component TEXT,
+            stage TEXT,
+            step TEXT,
+            errorType TEXT,
+            errorCode TEXT,
+            errorMessage TEXT,
+            errorDetail TEXT,
+            logPath TEXT,
+            logTail TEXT,
+            logMissing BOOLEAN DEFAULT 0,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    )
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_errorlog_runid_created ON ErrorLog(runId, createdAt);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_errorlog_type_created ON ErrorLog(errorType, createdAt);")
     conn.commit()
 
 

@@ -34,6 +34,8 @@ const STAGING_DIR = path.join(STORAGE_ROOT, 'staging');
 const OUTPUT_DIR = path.join(BUNDLE_ROOT, 'ARCHIVE', 'zips');
 const TAGGER_MODELS_DIR = path.join(SYSTEM_ROOT, 'webapp', 'tagger_models');
 const LOG_DIR = path.join(__dirname, 'logs');
+const ERRORLOG_RETENTION_DAYS = 30;
+const ERRORLOG_PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const WORKER_STALE_SECS = 30;
 const STEP_FRESH_SECS = 300;
 const SERVICE_PREFIX = path.basename(BUNDLE_ROOT).toLowerCase().includes('frameforge-dev')
@@ -104,6 +106,68 @@ const DEFAULT_SETTINGS = {
   trainer_max_grad_norm: 0,
   queue_mode: "running",
 };
+
+function readLogTail(filePath, maxLines = 160) {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const lines = content.split(/\r?\n/);
+    return lines.slice(-maxLines).join('\n');
+  } catch (err) {
+    return '';
+  }
+}
+
+function extractTrainerLogErrors(content) {
+  const lines = content.split(/\r?\n/);
+  const filtered = [];
+  let inTraceback = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const isErrorLine = /ERROR|Exception|FileNotFoundError|CalledProcessError/.test(line);
+    const isTraceback = trimmed.startsWith('Traceback (most recent call last):');
+    const isProgress = trimmed.startsWith('steps:');
+    if (isProgress) {
+      continue;
+    }
+    if (isProgress && inTraceback) {
+      inTraceback = false;
+    }
+    if (isTraceback) {
+      inTraceback = true;
+      filtered.push(line);
+      continue;
+    }
+    if (inTraceback) {
+      filtered.push(line);
+      continue;
+    }
+    if (isErrorLine) {
+      filtered.push(line);
+    }
+  }
+  const filteredText = filtered.join('\n').trim();
+  let summary = '';
+  const missingMatch = content.match(/FileNotFoundError: \[Errno \d+\] No such file or directory: '([^']+)'/);
+  if (missingMatch) {
+    summary = `Dataset file missing: ${missingMatch[1]}. Training stopped.`;
+  } else if (content.includes('Error loading file')) {
+    summary = 'Training failed while loading dataset files.';
+  } else if (content.includes('CalledProcessError')) {
+    summary = 'Training process exited with a non-zero status.';
+  }
+  return { summary, filteredTail: filteredText };
+}
+
+function extractTrainerLogPath(errorLog) {
+  const combined = `${errorLog?.errorMessage || ''}\n${errorLog?.errorDetail || ''}\n${errorLog?.logTail || ''}`;
+  const match = combined.match(/(\/[^\s]+_system\/trainer\/logs\/[^\s]+\.log)/);
+  if (!match) return null;
+  const fullPath = path.resolve(match[1]);
+  const allowedRoot = path.resolve(SYSTEM_ROOT, 'trainer', 'logs');
+  if (!fullPath.startsWith(allowedRoot)) return null;
+  if (!fs.existsSync(fullPath)) return null;
+  return fullPath;
+}
 
 function asBool(val, defaultVal = false) {
   if (val === undefined || val === null) return defaultVal;
@@ -443,6 +507,45 @@ async function ensureTrainProgressTable() {
 }
 ensureTrainProgressTable();
 
+async function ensureErrorLogTable() {
+  try {
+    await dbExec(`
+      CREATE TABLE IF NOT EXISTS ErrorLog (
+        id INTEGER PRIMARY KEY,
+        runId TEXT,
+        component TEXT,
+        stage TEXT,
+        step TEXT,
+        errorType TEXT,
+        errorCode TEXT,
+        errorMessage TEXT,
+        errorDetail TEXT,
+        logPath TEXT,
+        logTail TEXT,
+        logMissing BOOLEAN DEFAULT 0,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `, []);
+  } catch (err) {
+    console.error('[db:init] failed to ensure ErrorLog', err);
+  }
+}
+
+async function pruneErrorLog() {
+  try {
+    await dbExec(
+      "DELETE FROM ErrorLog WHERE createdAt < datetime('now', ?);",
+      [`-${ERRORLOG_RETENTION_DAYS} days`]
+    );
+  } catch (err) {
+    console.error('[db:prune] failed to prune ErrorLog', err);
+  }
+}
+
+ensureErrorLogTable();
+pruneErrorLog();
+setInterval(pruneErrorLog, ERRORLOG_PRUNE_INTERVAL_MS);
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/docs', express.static(DOCS_DIR));
@@ -677,6 +780,35 @@ app.get('/api/run/:id/progress', async (req, res) => {
   } catch (err) {
     console.error('[run:progress] failed', err);
     res.status(500).json({ error: 'failed to load progress' });
+  }
+});
+
+app.get('/api/error-log/:runId', async (req, res) => {
+  try {
+    const runId = String(req.params.runId || "").trim();
+    if (!runId) return res.status(400).json({ error: 'invalid runId' });
+    const rows = await dbQuery(
+      "SELECT * FROM ErrorLog WHERE runId=? ORDER BY createdAt DESC LIMIT 1",
+      [runId]
+    );
+    const row = rows?.[0] || null;
+    if (!row) return res.json({ errorLog: null });
+    const trainerLogPath = extractTrainerLogPath(row);
+    const trainerLogTail = trainerLogPath ? readLogTail(trainerLogPath, 400) : '';
+    const trainerLogParsed = trainerLogTail ? extractTrainerLogErrors(trainerLogTail) : { summary: '', filteredTail: '' };
+    res.json({
+      errorLog: row,
+      trainerLog: trainerLogPath
+        ? {
+            path: trainerLogPath,
+            summary: trainerLogParsed.summary,
+            filteredTail: trainerLogParsed.filteredTail,
+          }
+        : null,
+    });
+  } catch (err) {
+    console.error('[error-log] failed', err);
+    res.status(500).json({ error: 'failed to load error log' });
   }
 });
 

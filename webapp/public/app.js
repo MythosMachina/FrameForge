@@ -1636,6 +1636,10 @@ function renderActiveCard(run) {
     lastStep && lastStep !== "train_progress"
       ? ` • ${formatStepLabel(lastStep)}`
       : "";
+  const errorInfo =
+    statusLower === "failed"
+      ? `<button class="info-btn" onclick='openErrorDetails(${JSON.stringify(run.runId)}, ${JSON.stringify(run.name || run.runName || "")})'>i</button>`
+      : "";
   card.dataset.stepHint = stepHint;
   card.dataset.status = statusLower;
   const actions = [];
@@ -1654,7 +1658,10 @@ function renderActiveCard(run) {
         <div class="label">Run ${run.runId}</div>
         <div class="title">${run.name}</div>
       </div>
-      <span class="pill ${pillClass}">${pillLabel}${stepHint}</span>
+      <div class="pill-wrap">
+        <span class="pill ${pillClass}">${pillLabel}${stepHint}</span>
+        ${errorInfo}
+      </div>
     </div>
     <div class="steps">${stepsHtml}</div>
     <div class="meta">
@@ -1682,7 +1689,8 @@ function renderActiveCard(run) {
 function renderHistoryCard(run) {
   const card = document.createElement("article");
   card.className = "card";
-  const statusLower = (run.status || "").toLowerCase();
+  const rawStatus = (run.status || "").toLowerCase();
+  const statusLower = rawStatus.startsWith("failed") ? "failed" : rawStatus;
   const pillClass =
     statusLower === "failed"
       ? "pill-failed"
@@ -1699,6 +1707,10 @@ function renderHistoryCard(run) {
       : statusLower === "queued"
       ? "queued"
       : "ready";
+  const errorInfo =
+    statusLower === "failed"
+      ? `<button class="info-btn" onclick='openErrorDetails(${JSON.stringify(run.runId)}, ${JSON.stringify(run.name || run.runName || "")})'>i</button>`
+      : "";
   const buttons = [];
   buttons.push(`<button class="btn secondary" onclick='openResults(${run.id}, ${JSON.stringify(run.runName || run.name || "")})'>Results</button>`);
   buttons.push(`<button class="btn danger" onclick="deleteRun(${run.id})">Delete</button>`);
@@ -1708,7 +1720,10 @@ function renderHistoryCard(run) {
         <div class="label">Finished</div>
         <div class="title">${run.name}</div>
       </div>
-      <span class="pill ${pillClass}">${pillLabel}</span>
+      <div class="pill-wrap">
+        <span class="pill ${pillClass}">${pillLabel}</span>
+        ${errorInfo}
+      </div>
     </div>
     <div class="meta">
       <span>created: ${formatTimestamp(run.createdAt)}</span>
@@ -1738,6 +1753,10 @@ function renderQueueCard(run) {
       ? "pill-queued"
       : "pill-running";
   const pillLabel = statusLower === "failed" ? "failed" : statusLower === "done" ? "done" : statusLower === "queued" ? "queued" : "waiting";
+  const errorInfo =
+    statusLower === "failed"
+      ? `<button class="info-btn" onclick='openErrorDetails(${JSON.stringify(run.runId)}, ${JSON.stringify(run.name || run.runName || "")})'>i</button>`
+      : "";
   const actions = [];
   actions.push(`<button class="btn danger" onclick="stopRun(${run.id})">Stop job</button>`);
   card.innerHTML = `
@@ -1746,7 +1765,10 @@ function renderQueueCard(run) {
         <div class="label">Run ${run.runId}</div>
         <div class="title">${run.name}</div>
       </div>
-      <span class="pill ${pillClass}">${pillLabel}</span>
+      <div class="pill-wrap">
+        <span class="pill ${pillClass}">${pillLabel}</span>
+        ${errorInfo}
+      </div>
     </div>
     <div class="meta">
       <span>created: ${formatTimestamp(run.createdAt)}</span>
@@ -1762,6 +1784,111 @@ window.deleteRun = deleteRun;
 window.stopRun = stopRun;
 window.openSamples = openSamples;
 window.openResults = openResults;
+window.openErrorDetails = openErrorDetails;
+
+async function openErrorDetails(runId, runName = "") {
+  try {
+    const res = await fetch(`/api/error-log/${encodeURIComponent(runId)}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "failed to load error details");
+    }
+    const data = await res.json();
+    const errorLog = data.errorLog;
+    const trainerLog = data.trainerLog;
+    if (!errorLog) {
+      alert("No error details available for this run.");
+      return;
+    }
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop";
+    const modal = document.createElement("div");
+    modal.className = "modal";
+    const head = document.createElement("div");
+    head.className = "modal-head";
+    head.innerHTML = `
+      <div>
+        <div class="label">Failure details</div>
+        <div class="title">${escapeHtml(runName || `Run ${runId}`)}</div>
+      </div>
+      <button class="btn ghost" type="button">Close</button>
+    `;
+    const closeBtn = head.querySelector("button");
+    closeBtn?.addEventListener("click", () => overlay.remove());
+    modal.appendChild(head);
+
+    const body = document.createElement("div");
+    body.className = "error-details";
+    body.innerHTML = `
+      <div class="error-summary">
+        <div class="error-summary-item">
+          <div class="label">Component</div>
+          <div class="value">${escapeHtml(errorLog.component || "-")}</div>
+        </div>
+        <div class="error-summary-item">
+          <div class="label">Stage</div>
+          <div class="value">${escapeHtml(errorLog.stage || "-")}</div>
+        </div>
+        <div class="error-summary-item">
+          <div class="label">Step</div>
+          <div class="value">${escapeHtml(errorLog.step || "-")}</div>
+        </div>
+        <div class="error-summary-item">
+          <div class="label">Type</div>
+          <div class="value">${escapeHtml(errorLog.errorType || "-")}</div>
+        </div>
+        <div class="error-summary-item">
+          <div class="label">Code</div>
+          <div class="value">${escapeHtml(errorLog.errorCode || "-")}</div>
+        </div>
+        <div class="error-summary-item">
+          <div class="label">Time</div>
+          <div class="value">${escapeHtml(errorLog.createdAt || "-")}</div>
+        </div>
+      </div>
+      <div class="error-block">
+        <div class="label">Message</div>
+        <pre>${escapeHtml(errorLog.errorMessage || "")}</pre>
+      </div>
+      ${errorLog.errorDetail ? `
+        <div class="error-block">
+          <div class="label">Detail</div>
+          <pre>${escapeHtml(errorLog.errorDetail)}</pre>
+        </div>` : ""}
+      ${errorLog.logPath ? `
+        <div class="error-block">
+          <div class="label">Log path</div>
+          <pre>${escapeHtml(errorLog.logPath)}</pre>
+        </div>` : ""}
+      ${trainerLog ? `
+        ${trainerLog.summary ? `
+          <div class="error-block">
+            <div class="label">Trainer error summary</div>
+            <pre>${escapeHtml(trainerLog.summary)}</pre>
+          </div>` : ""}
+        <div class="error-block">
+          <div class="label">Trainer log path</div>
+          <pre>${escapeHtml(trainerLog.path || "")}</pre>
+        </div>
+        <div class="error-block">
+          <div class="label">Trainer error log</div>
+          <pre>${escapeHtml(trainerLog.filteredTail || "(no trainer error lines found)")}</pre>
+        </div>` : ""}
+      <div class="error-block">
+        <div class="label">Log tail</div>
+        <pre>${escapeHtml(errorLog.logTail || "(no log tail available)")}</pre>
+      </div>
+    `;
+    modal.appendChild(body);
+    overlay.appendChild(modal);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+    document.body.appendChild(overlay);
+  } catch (err) {
+    alert(err.message || "Failed to load error details");
+  }
+}
 
 function openLightbox(src, label = "") {
   const overlay = document.createElement("div");

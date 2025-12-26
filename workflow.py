@@ -7,6 +7,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+import traceback
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
@@ -46,6 +47,7 @@ CROP_SCRIPT = Path(__file__).resolve().parent / "crop_and_flip.Bulk.py"
 # Optional integration with webapp for step status
 RUN_ID = os.environ.get("RUN_ID")
 RUN_DB = os.environ.get("RUN_DB")
+LAST_STEP = ""
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 DEFAULT_SETTINGS = {
@@ -109,6 +111,8 @@ def update_run_step(step: str) -> None:
     # so the UI can reflect live train progress even in orchestrator-driven mode.
     if os.environ.get("ORCHESTRATOR_DRIVER") == "1" and not step.startswith("train_progress"):
         return
+    global LAST_STEP
+    LAST_STEP = step
     if not RUN_ID or not RUN_DB:
         return
     if broker_enabled():
@@ -178,8 +182,94 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _read_log_tail(path: Optional[Path], max_lines: int = 200) -> tuple[str, bool]:
+    if not path or not path.exists():
+        return "", True
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as handle:
+            lines = handle.readlines()
+        tail = "".join(lines[-max_lines:]) if lines else ""
+        return tail, False
+    except Exception:
+        return "", True
+
+
+def _insert_error_log(
+    *,
+    run_id: Optional[str],
+    component: str,
+    stage: str,
+    step: str,
+    error_type: str,
+    error_code: str,
+    error_message: str,
+    error_detail: str,
+    log_path: Optional[Path] = None,
+) -> None:
+    db_path = os.environ.get("RUN_DB")
+    tail, missing = _read_log_tail(log_path)
+    detail = error_detail or ""
+    if missing and "[log_missing]" not in detail:
+        detail = (detail + "\n" if detail else "") + "[log_missing] log tail unavailable"
+        if error_type in {"", "unclassified"}:
+            error_type = "log_missing"
+    sql = (
+        "INSERT INTO ErrorLog (runId, component, stage, step, errorType, errorCode, "
+        "errorMessage, errorDetail, logPath, logTail, logMissing, createdAt) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
+    )
+    params = [
+        run_id,
+        component,
+        stage,
+        step,
+        error_type,
+        error_code,
+        error_message,
+        detail,
+        str(log_path) if log_path else None,
+        tail,
+        1 if missing else 0,
+    ]
+    if broker_enabled():
+        try:
+            broker_exec("sql_exec", {"sql": sql, "params": params})
+        except Exception:
+            pass
+        return
+    if not db_path:
+        return
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
 def log(msg: str) -> None:
     print(f"[info] {msg}")
+
+
+def _classify_exception(exc: Exception) -> tuple[str, str, str]:
+    if isinstance(exc, subprocess.CalledProcessError):
+        code = str(exc.returncode) if exc.returncode is not None else "nonzero_exit"
+        msg = str(exc) or "external process failed"
+        detail = ""
+        if getattr(exc, "cmd", None):
+            detail = f"cmd: {exc.cmd}"
+        return "external_process_failed", code, msg + (f"\n{detail}" if detail else "")
+    if isinstance(exc, FileNotFoundError):
+        code = exc.filename or "file_not_found"
+        msg = str(exc) or "dependency unavailable"
+        return "dependency_unavailable", code, msg
+    if isinstance(exc, OSError):
+        code = str(getattr(exc, "errno", "") or "os_error")
+        msg = str(exc) or "filesystem error"
+        return "io_filesystem", code, msg
+    return "workflow_exception", exc.__class__.__name__, str(exc)
 
 
 def ensure_dir_empty(path: Path, dry_run: bool = False) -> None:
@@ -764,4 +854,24 @@ def main(args: argparse.Namespace) -> None:
 
 
 if __name__ == "__main__":
-    main(parse_args())
+    try:
+        main(parse_args())
+    except Exception as exc:
+        run_id = os.environ.get("RUN_ID")
+        log_path = None
+        if run_id:
+            log_path = BUNDLE_ROOT / "_system" / "logs" / f"workflow_{run_id}.log"
+        stage = LAST_STEP or "workflow"
+        error_type, error_code, message = _classify_exception(exc)
+        _insert_error_log(
+            run_id=run_id,
+            component="workflow",
+            stage=stage,
+            step=stage,
+            error_type=error_type,
+            error_code=error_code,
+            error_message=message,
+            error_detail=traceback.format_exc(),
+            log_path=log_path,
+        )
+        raise

@@ -15,6 +15,7 @@ from orchestration_common import (
     fetch_next_run,
     get_queue_mode,
     has_run_with_status,
+    log_error,
     log,
     mark_run_status,
     recover_inflight_runs,
@@ -215,6 +216,17 @@ def main() -> None:
             else:
                 msg = f"workflow exited {ret}; log: {log_path}"
                 mark_run_status(conn, run["id"], "failed_worker", last_step or "failed_worker", error=msg, finished=True)
+                log_error(
+                    conn,
+                    run_id_db=run["id"],
+                    component=ROLE,
+                    stage=last_step or "workflow",
+                    step=last_step or "failed_worker",
+                    error_type="external_process_failed",
+                    error_code=f"workflow_exit_{ret}",
+                    error_message=msg,
+                    log_path=log_path,
+                )
                 set_queue_mode(conn, "paused")
                 log(ROLE, f"run {run['runId']} failed: {msg}")
                 time.sleep(POLL_SECONDS)
