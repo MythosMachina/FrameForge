@@ -332,6 +332,10 @@ async function brokerPost(pathSuffix, payload) {
   return data.data;
 }
 
+async function brokerExec(op, args = {}) {
+  return brokerPost('/db/exec', { op, args });
+}
+
 async function dbQuery(sql, params = []) {
   return brokerPost('/db/query', { op: 'sql_query', args: { sql, params } });
 }
@@ -375,6 +379,9 @@ async function dbCreateRun(data) {
     `INSERT INTO Run (${fields.join(", ")}) VALUES (${fields.map(() => "?").join(", ")})`,
     values
   );
+  if (data.status === "queued") {
+    await brokerExec("queue_enqueue", { run_id: data.runId });
+  }
   const rows = await dbQuery("SELECT * FROM Run WHERE runId=?", [data.runId]);
   return rows?.[0] || null;
 }
@@ -386,6 +393,23 @@ async function dbUpdateRunFields(id, fields) {
   const params = keys.map((k) => fields[k]);
   params.push(id);
   await dbExec(`UPDATE Run SET ${setSql} WHERE id=?`, params);
+}
+
+async function dbFindQueuedRuns() {
+  return dbQuery(
+    `
+    SELECT r.*, q.position AS queuePos
+    FROM Run r
+    JOIN QueueItem q ON q.runId = r.runId
+    WHERE r.status='queued'
+    ORDER BY q.position ASC, r.createdAt ASC
+    `,
+    []
+  );
+}
+
+async function dbQueueReorder(runId, position) {
+  return brokerExec("queue_reorder", { run_id: runId, position });
 }
 
 const QUEUE_MODES = ["running", "paused", "stopped"];
@@ -519,6 +543,15 @@ async function ensureTrainProgressTable() {
   }
 }
 ensureTrainProgressTable();
+
+async function ensureQueueItems() {
+  try {
+    await brokerExec("queue_backfill", {});
+  } catch (err) {
+    console.error('[db:init] failed to backfill queue items', err);
+  }
+}
+ensureQueueItems();
 
 async function ensureErrorLogTable() {
   try {
@@ -730,10 +763,12 @@ app.get('/api/system/status', async (_req, res) => {
 });
 
 app.get('/api/queue', async (_req, res) => {
-  const items = await dbFindRunsByStatuses(
-    ['queued', 'queued_initiated', 'running', 'ready_for_finish', 'manual_tagging', 'ready_to_train'],
+  const queuedItems = await dbFindQueuedRuns();
+  const activeItems = await dbFindRunsByStatuses(
+    ['queued_initiated', 'running', 'ready_for_finish', 'manual_tagging', 'ready_to_train'],
     "createdAt ASC, id ASC"
   );
+  const items = [...queuedItems, ...activeItems];
   const runIds = items.map((r) => r.runId);
   const progressMap = await readTrainProgress(runIds);
   const queue = items.map((r) => {
@@ -746,6 +781,26 @@ app.get('/api/queue', async (_req, res) => {
     return run;
   });
   res.json({ queue });
+});
+
+app.post('/api/queue/reorder', async (req, res) => {
+  try {
+    const runId = String(req.body?.runId || "").trim();
+    const position = Number(req.body?.position);
+    if (!runId || !Number.isFinite(position)) {
+      return res.status(400).json({ error: 'runId and position required' });
+    }
+    const rows = await dbQuery("SELECT status FROM Run WHERE runId=?", [runId]);
+    const status = rows?.[0]?.status || "";
+    if (String(status).toLowerCase() !== "queued") {
+      return res.status(400).json({ error: 'run is not queued' });
+    }
+    await dbQueueReorder(runId, Math.trunc(position));
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[queue:reorder] failed', err);
+    res.status(500).json({ error: 'failed to reorder queue' });
+  }
 });
 
 app.get('/api/history', async (_req, res) => {

@@ -95,6 +95,16 @@ def _ensure_tables(conn: sqlite3.Connection) -> None:
     )
     cur.execute(
         """
+        CREATE TABLE IF NOT EXISTS QueueItem (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            runId TEXT UNIQUE NOT NULL,
+            position INTEGER NOT NULL,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    )
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS ErrorLog (
             id INTEGER PRIMARY KEY,
             runId TEXT,
@@ -231,16 +241,29 @@ def _op_set_plan_step(args: Dict[str, Any]) -> None:
 def _op_fetch_next_run(args: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     status = args.get("status")
     cur = _conn().cursor()
-    cur.execute(
-        """
-        SELECT id, runId, runName, name, type, flags, uploadPath, trainProfile
-        FROM Run
-        WHERE status=?
-        ORDER BY createdAt ASC
-        LIMIT 1;
-        """,
-        (status,),
-    )
+    if status == "queued":
+        cur.execute(
+            """
+            SELECT r.id, r.runId, r.runName, r.name, r.type, r.flags, r.uploadPath, r.trainProfile
+            FROM Run r
+            JOIN QueueItem q ON q.runId = r.runId
+            WHERE r.status=?
+            ORDER BY q.position ASC, r.createdAt ASC
+            LIMIT 1;
+            """,
+            (status,),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT id, runId, runName, name, type, flags, uploadPath, trainProfile
+            FROM Run
+            WHERE status=?
+            ORDER BY createdAt ASC
+            LIMIT 1;
+            """,
+            (status,),
+        )
     row = cur.fetchone()
     if not row:
         return None
@@ -292,6 +315,26 @@ def _op_mark_run_status(args: Dict[str, Any]) -> None:
     sql = f"UPDATE Run SET {', '.join(fields)} WHERE id=?;"
     cur = _conn().cursor()
     cur.execute(sql, params)
+    if status != "queued":
+        cur.execute("SELECT position FROM QueueItem WHERE runId=(SELECT runId FROM Run WHERE id=?)", (run_id_db,))
+        row = cur.fetchone()
+        if row:
+            old_pos = row[0]
+            cur.execute("DELETE FROM QueueItem WHERE runId=(SELECT runId FROM Run WHERE id=?)", (run_id_db,))
+            cur.execute("UPDATE QueueItem SET position=position-1 WHERE position>?", (old_pos,))
+    elif status == "queued":
+        cur.execute("SELECT runId FROM Run WHERE id=?", (run_id_db,))
+        row = cur.fetchone()
+        run_id = row[0] if row else None
+        if run_id:
+            cur.execute("SELECT 1 FROM QueueItem WHERE runId=?", (run_id,))
+            if not cur.fetchone():
+                cur.execute("SELECT COALESCE(MAX(position), 0) FROM QueueItem")
+                max_pos = cur.fetchone()[0] or 0
+                cur.execute(
+                    "INSERT INTO QueueItem (runId, position) VALUES (?, ?)",
+                    (run_id, int(max_pos) + 1),
+                )
     _conn().commit()
 
 
@@ -377,6 +420,103 @@ def _op_recover_inflight_runs(_: Dict[str, Any]) -> None:
     _conn().commit()
 
 
+def _op_queue_enqueue(args: Dict[str, Any]) -> None:
+    run_id = args.get("run_id")
+    if not run_id:
+        return
+    cur = _conn().cursor()
+    cur.execute("SELECT 1 FROM QueueItem WHERE runId=?", (run_id,))
+    if cur.fetchone():
+        return
+    cur.execute("SELECT COALESCE(MAX(position), 0) FROM QueueItem")
+    max_pos = cur.fetchone()[0] or 0
+    cur.execute(
+        "INSERT INTO QueueItem (runId, position) VALUES (?, ?)",
+        (run_id, int(max_pos) + 1),
+    )
+    _conn().commit()
+
+
+def _op_queue_remove(args: Dict[str, Any]) -> None:
+    run_id = args.get("run_id")
+    if not run_id:
+        return
+    cur = _conn().cursor()
+    cur.execute("SELECT position FROM QueueItem WHERE runId=?", (run_id,))
+    row = cur.fetchone()
+    if not row:
+        return
+    old_pos = row[0]
+    cur.execute("DELETE FROM QueueItem WHERE runId=?", (run_id,))
+    cur.execute("UPDATE QueueItem SET position=position-1 WHERE position>?", (old_pos,))
+    _conn().commit()
+
+
+def _op_queue_reorder(args: Dict[str, Any]) -> None:
+    run_id = args.get("run_id")
+    position = args.get("position")
+    if not run_id or position is None:
+        return
+    try:
+        new_pos = int(position)
+    except Exception:
+        return
+    cur = _conn().cursor()
+    cur.execute("BEGIN IMMEDIATE;")
+    cur.execute("SELECT position FROM QueueItem WHERE runId=?", (run_id,))
+    row = cur.fetchone()
+    if not row:
+        _conn().rollback()
+        return
+    old_pos = int(row[0])
+    cur.execute("SELECT COUNT(*) FROM QueueItem")
+    count = int(cur.fetchone()[0] or 0)
+    if count <= 0:
+        _conn().rollback()
+        return
+    if new_pos < 1:
+        new_pos = 1
+    if new_pos > count:
+        new_pos = count
+    if new_pos == old_pos:
+        _conn().commit()
+        return
+    if new_pos < old_pos:
+        cur.execute(
+            "UPDATE QueueItem SET position=position+1 WHERE position>=? AND position<?",
+            (new_pos, old_pos),
+        )
+    else:
+        cur.execute(
+            "UPDATE QueueItem SET position=position-1 WHERE position<=? AND position>?",
+            (new_pos, old_pos),
+        )
+    cur.execute("UPDATE QueueItem SET position=? WHERE runId=?", (new_pos, run_id))
+    _conn().commit()
+
+
+def _op_queue_backfill(_: Dict[str, Any]) -> None:
+    cur = _conn().cursor()
+    cur.execute(
+        """
+        SELECT r.runId
+        FROM Run r
+        LEFT JOIN QueueItem q ON q.runId = r.runId
+        WHERE r.status='queued' AND q.runId IS NULL
+        ORDER BY r.createdAt ASC;
+        """
+    )
+    rows = cur.fetchall()
+    if not rows:
+        return
+    cur.execute("SELECT COALESCE(MAX(position), 0) FROM QueueItem")
+    max_pos = cur.fetchone()[0] or 0
+    for row in rows:
+        max_pos += 1
+        cur.execute("INSERT INTO QueueItem (runId, position) VALUES (?, ?)", (row[0], max_pos))
+    _conn().commit()
+
+
 def _op_set_run_downloads(args: Dict[str, Any]) -> None:
     run_id_db = args.get("run_id_db")
     dataset = args.get("dataset")
@@ -448,6 +588,10 @@ WRITE_OPS = {
     "upsert_train_progress": _op_upsert_train_progress,
     "recover_inflight_runs": _op_recover_inflight_runs,
     "set_run_downloads": _op_set_run_downloads,
+    "queue_enqueue": _op_queue_enqueue,
+    "queue_remove": _op_queue_remove,
+    "queue_reorder": _op_queue_reorder,
+    "queue_backfill": _op_queue_backfill,
     "sql_exec": _op_sql_exec,
 }
 
