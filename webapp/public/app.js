@@ -58,6 +58,10 @@ const TRAINER_KEYS = [
   "trainer_max_grad_norm",
 ];
 
+const TRAIN_PROFILE_CATEGORIES = ["real", "anime", "quickshot"];
+const TRAIN_PROFILE_TIERS = ["low", "med", "high"];
+const TRAIN_PROFILE_CATEGORY_OPTIONS = [...TRAIN_PROFILE_CATEGORIES, "other"];
+
 const SETTINGS_KEYS = [
   "capping_fps",
   "capping_jpeg_quality",
@@ -470,31 +474,50 @@ function wireUploadForm() {
 
 async function loadTrainProfiles() {
   const select = document.getElementById("train-profile");
+  const categorySelect = document.getElementById("train-profile-category");
+  const editCategorySelect = document.getElementById("train-profile-category-edit");
+  const editTierSelect = document.getElementById("train-profile-tier-edit");
   const list = document.getElementById("train-profile-list");
   if (select) select.innerHTML = "";
+  if (categorySelect) categorySelect.innerHTML = "";
+  if (editCategorySelect) editCategorySelect.innerHTML = "";
+  if (editTierSelect) editTierSelect.innerHTML = "";
   try {
     const res = await fetch("/api/train-profiles");
     if (!res.ok) throw new Error("failed to load train profiles");
     const data = await res.json();
     const profiles = data.profiles || [];
-    trainProfileCache = profiles;
+    const mappedProfiles = profiles.map((p) => {
+      const { category, tier } = parseTrainProfileName(p.name);
+      return { ...p, category, tier };
+    });
+    trainProfileCache = mappedProfiles;
+    const categories = buildProfileCategoryList(mappedProfiles, false, true);
     if (select) {
-      if (!profiles.length) {
+      if (!mappedProfiles.length) {
         select.innerHTML = '<option value="">(no profiles)</option>';
       } else {
-        const defaultProfile = profiles.find((p) => p.isDefault) || profiles[0];
-        profiles.forEach((p) => {
-          const opt = document.createElement("option");
-          opt.value = p.name;
-          opt.textContent = p.label ? `${p.name} — ${p.label}` : p.name;
-          if (defaultProfile && p.name === defaultProfile.name) opt.selected = true;
-          select.appendChild(opt);
-        });
+        const defaultProfile = mappedProfiles.find((p) => p.isDefault) || mappedProfiles[0];
+        if (categorySelect) {
+          renderCategorySelect(categorySelect, categories, defaultProfile?.category);
+          const defaultCategory = defaultProfile?.category || categories[0];
+          renderProfileSelectOptions(select, mappedProfiles, defaultCategory, defaultProfile?.name);
+          categorySelect.onchange = () => {
+            renderProfileSelectOptions(select, mappedProfiles, categorySelect.value);
+          };
+        } else {
+          renderProfileSelectOptions(select, mappedProfiles, defaultProfile?.category || "other", defaultProfile?.name);
+        }
       }
     }
+    if (editCategorySelect && editTierSelect) {
+      const fallbackCategory = "real";
+      renderCategorySelect(editCategorySelect, buildProfileCategoryList(mappedProfiles, true, true), fallbackCategory);
+      renderTierSelect(editTierSelect, TRAIN_PROFILE_TIERS, "");
+    }
     if (list) {
-      renderTrainProfileList(profiles);
-      const fallback = profiles.find((p) => p.isDefault) || profiles[0];
+      renderTrainProfileList(mappedProfiles);
+      const fallback = mappedProfiles.find((p) => p.isDefault) || mappedProfiles[0];
       if (fallback && (!activeTrainProfile || activeTrainProfile.id !== fallback.id)) {
         setActiveTrainProfile(fallback);
       }
@@ -502,6 +525,95 @@ async function loadTrainProfiles() {
   } catch (_err) {
     if (select) select.innerHTML = '<option value="">(failed to load)</option>';
   }
+}
+
+function humanizeKey(val) {
+  return String(val || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function parseTrainProfileName(name) {
+  const raw = String(name || "").trim().toLowerCase();
+  const parts = raw.split("_");
+  if (parts.length >= 2) {
+    const category = parts[0];
+    const tier = parts.slice(1).join("_");
+    if (TRAIN_PROFILE_CATEGORIES.includes(category) && TRAIN_PROFILE_TIERS.includes(tier)) {
+      return { category, tier };
+    }
+  }
+  return { category: "other", tier: raw };
+}
+
+function buildProfileCategoryList(profiles, includeOtherAlways, includeAllFixed) {
+  const found = new Set();
+  profiles.forEach((p) => {
+    if (p.category && p.category !== "other") found.add(p.category);
+  });
+  const hasOther = profiles.some((p) => (p.category || "other") === "other");
+  const ordered = includeAllFixed
+    ? [...TRAIN_PROFILE_CATEGORIES]
+    : TRAIN_PROFILE_CATEGORIES.filter((c) => found.has(c));
+  if (includeOtherAlways || hasOther) ordered.push("other");
+  return ordered.length ? ordered : ["other"];
+}
+
+function renderCategorySelect(select, categories, selected) {
+  if (!select) return;
+  select.innerHTML = "";
+  categories.forEach((cat) => {
+    const opt = document.createElement("option");
+    opt.value = cat;
+    opt.textContent = humanizeKey(cat);
+    select.appendChild(opt);
+  });
+  if (selected && categories.includes(selected)) {
+    select.value = selected;
+  }
+}
+
+function renderTierSelect(select, tiers, selected) {
+  if (!select) return;
+  select.innerHTML = "";
+  if (!tiers.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Select tier...";
+    select.appendChild(opt);
+    return;
+  }
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Select tier...";
+  select.appendChild(placeholder);
+  tiers.forEach((tier) => {
+    const opt = document.createElement("option");
+    opt.value = tier;
+    opt.textContent = humanizeKey(tier);
+    select.appendChild(opt);
+  });
+  if (selected && tiers.includes(selected)) {
+    select.value = selected;
+  }
+}
+
+function renderProfileSelectOptions(select, profiles, category, selectedName = "") {
+  if (!select) return;
+  const filtered = profiles.filter((p) => (p.category || "other") === (category || "other"));
+  select.innerHTML = "";
+  if (!filtered.length) {
+    select.innerHTML = '<option value="">(no profiles)</option>';
+    return;
+  }
+  filtered.forEach((p) => {
+    const opt = document.createElement("option");
+    opt.value = p.name;
+    const tierLabel = p.category === "other" ? p.name : humanizeKey(p.tier);
+    opt.textContent = p.label ? `${tierLabel} — ${p.label}` : tierLabel;
+    if (selectedName && p.name === selectedName) opt.selected = true;
+    select.appendChild(opt);
+  });
 }
 
 function fillTrainerSettings(settings) {
@@ -544,12 +656,14 @@ function renderTrainProfileList(profiles) {
   list.innerHTML = profiles
     .map((p) => {
       const badge = p.isDefault ? '<span class="pill">default</span>' : '';
+      const category = p.category && p.category !== "other" ? humanizeKey(p.category) : "Other";
+      const tier = p.category !== "other" ? humanizeKey(p.tier) : p.name;
       const label = p.label ? `<div class="muted small">${p.label}</div>` : '';
       return `
         <div class="card" data-id="${p.id}">
           <div class="card-head">
             <div>
-              <div class="label">${p.name}</div>
+              <div class="label">${category} · ${tier}</div>
               ${label}
             </div>
             ${badge}
@@ -576,6 +690,8 @@ function setActiveTrainProfile(profile) {
   const idInput = form.querySelector('input[name="id"]');
   const nameInput = form.querySelector('input[name="name"]');
   const labelInput = form.querySelector('input[name="label"]');
+  const categoryInput = document.getElementById("train-profile-category-edit");
+  const tierInput = document.getElementById("train-profile-tier-edit");
   const defaultToggle = document.getElementById("train-profile-default");
   const jsonText = document.getElementById("train-profile-json-text");
   activeTrainProfile = profile;
@@ -584,6 +700,14 @@ function setActiveTrainProfile(profile) {
   if (nameInput) nameInput.value = profile?.name || "";
   if (labelInput) labelInput.value = profile?.label || "";
   if (defaultToggle) defaultToggle.checked = !!profile?.isDefault;
+  const category = profile?.category || "other";
+  const tier = profile?.tier || "";
+  if (categoryInput) categoryInput.value = category;
+  if (tierInput) {
+    renderTierSelect(tierInput, TRAIN_PROFILE_TIERS, category === "other" ? "" : tier);
+  }
+  if (nameInput) nameInput.disabled = category !== "other";
+  if (tierInput) tierInput.disabled = category === "other";
   const settings = profile?.settings && typeof profile.settings === "object" ? profile.settings : {};
   Object.keys(settings).forEach((key) => {
     if (!TRAINER_KEYS.includes(key)) activeTrainProfileExtras[key] = settings[key];
@@ -600,16 +724,45 @@ function wireTrainProfileEditor() {
   const msgEl = document.getElementById("train-profile-msg");
   const resetBtn = document.getElementById("train-profile-reset");
   const deleteBtn = document.getElementById("train-profile-delete");
+  const categoryInput = document.getElementById("train-profile-category-edit");
+  const tierInput = document.getElementById("train-profile-tier-edit");
   const advancedToggle = document.getElementById("train-profile-advanced");
   const jsonWrap = document.getElementById("train-profile-json");
   const fieldsWrap = document.getElementById("train-profile-fields");
   const jsonText = document.getElementById("train-profile-json-text");
+  const nameInput = form.querySelector('input[name="name"]');
 
   const setMsg = (text, cls = "") => {
     if (!msgEl) return;
     msgEl.textContent = text;
     msgEl.className = `status-msg ${cls}`;
   };
+
+  const syncNameFromCategoryTier = () => {
+    if (!categoryInput || !tierInput || !nameInput) return;
+    const category = categoryInput.value || "other";
+    if (category === "other") {
+      nameInput.disabled = false;
+      tierInput.disabled = true;
+      return;
+    }
+    tierInput.disabled = false;
+    const tier = String(tierInput.value || "").trim().toLowerCase().replace(/\s+/g, "_");
+    nameInput.disabled = true;
+    nameInput.value = tier ? `${category}_${tier}` : "";
+  };
+
+  if (categoryInput) {
+    categoryInput.addEventListener("change", () => {
+      renderTierSelect(tierInput, TRAIN_PROFILE_TIERS, "");
+      syncNameFromCategoryTier();
+    });
+  }
+  if (tierInput) {
+    tierInput.addEventListener("input", () => {
+      syncNameFromCategoryTier();
+    });
+  }
 
   const toggleAdvanced = (force) => {
     if (!advancedToggle || !jsonWrap || !fieldsWrap || !jsonText) return;
@@ -646,8 +799,15 @@ function wireTrainProfileEditor() {
     e.preventDefault();
     setMsg("Saving...");
     const id = form.querySelector('input[name="id"]')?.value || "";
-    const name = form.querySelector('input[name="name"]')?.value || "";
     const label = form.querySelector('input[name="label"]')?.value || "";
+    if (categoryInput && tierInput) {
+      const category = categoryInput.value || "other";
+      const tier = String(tierInput.value || "").trim();
+      if (category !== "other" && !tier) {
+        setMsg("Tier is required for this category", "error");
+        return;
+      }
+    }
     const isDefault = document.getElementById("train-profile-default")?.checked || false;
     let settingsObj = {};
     try {
@@ -661,6 +821,8 @@ function wireTrainProfileEditor() {
       return;
     }
     try {
+      syncNameFromCategoryTier();
+      const name = form.querySelector('input[name="name"]')?.value || "";
       const res = await fetch(id ? `/api/train-profiles/${id}` : "/api/train-profiles", {
         method: id ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -682,6 +844,11 @@ function wireTrainProfileEditor() {
       form.querySelector('input[name="id"]').value = "";
       form.querySelector('input[name="name"]').value = "";
       form.querySelector('input[name="label"]').value = "";
+      if (categoryInput) categoryInput.value = "real";
+      if (tierInput) {
+        renderTierSelect(tierInput, TRAIN_PROFILE_TIERS, "");
+      }
+      if (nameInput) nameInput.disabled = categoryInput?.value !== "other";
       const defaultToggle = document.getElementById("train-profile-default");
       if (defaultToggle) defaultToggle.checked = false;
       activeTrainProfile = null;
@@ -713,6 +880,7 @@ function wireTrainProfileEditor() {
   }
 
   toggleAdvanced(false);
+  syncNameFromCategoryTier();
 }
 
 function wireSettings() {

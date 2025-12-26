@@ -145,6 +145,7 @@
               </label>
               <label class="field">
                 <span>Train profile</span>
+                <select name="trainProfileCategory" id="train-profile-category"></select>
                 <select name="trainProfile" id="train-profile">
                   <option value="">loading...</option>
                 </select>
@@ -551,16 +552,24 @@
             <form id="train-profile-form" class="form compact">
               <input type="hidden" name="id" value="">
               <div class="trainer-form-head">
-                <div class="trainer-form-fields">
-                  <label class="field">
-                    <span>Name</span>
-                    <input type="text" name="name" required placeholder="e.g. balanced">
-                  </label>
-                  <label class="field">
-                    <span>Label</span>
-                    <input type="text" name="label" placeholder="optional">
-                  </label>
-                </div>
+              <div class="trainer-form-fields">
+                <label class="field">
+                  <span>Name</span>
+                  <input type="text" name="name" required placeholder="e.g. balanced">
+                </label>
+                <label class="field">
+                  <span>Label</span>
+                  <input type="text" name="label" placeholder="optional">
+                </label>
+                <label class="field">
+                  <span>Category</span>
+                  <select id="train-profile-category-edit"></select>
+                </label>
+                <label class="field">
+                  <span>Tier</span>
+                  <select id="train-profile-tier-edit"></select>
+                </label>
+              </div>
                 <div class="trainer-form-tools">
                   <div class="trainer-toggles">
                     <label class="field inline">
