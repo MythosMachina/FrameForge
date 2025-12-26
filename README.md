@@ -30,9 +30,6 @@ https://discord.gg/TB5DHMNa5J
 ## Quick Start
 ```bash
 ./scripts/setup_all.sh
-sudo cp systemd/frameforge-*.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now frameforge-db-broker frameforge-webapp frameforge-initiator frameforge-orchestrator frameforge-finisher
 ```
 
 Open the Web UI at `http://localhost:3005`.
