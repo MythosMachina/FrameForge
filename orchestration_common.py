@@ -66,6 +66,25 @@ def ensure_tables(conn: Optional[sqlite3.Connection]) -> None:
         );
         """
     )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ErrorLog (
+            id INTEGER PRIMARY KEY,
+            runId TEXT,
+            component TEXT,
+            stage TEXT,
+            step TEXT,
+            errorType TEXT,
+            errorCode TEXT,
+            errorMessage TEXT,
+            errorDetail TEXT,
+            logPath TEXT,
+            logTail TEXT,
+            logMissing BOOLEAN DEFAULT 0,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    )
     conn.commit()
 
 
@@ -136,6 +155,37 @@ def update_worker_status(
         (role, os.getpid(), state, run_id, message, now),
     )
     conn.commit()
+
+
+def get_worker_status(conn: Optional[sqlite3.Connection], role: str) -> Optional[dict]:
+    if broker_enabled():
+        try:
+            resp = broker_query(
+                "sql_query",
+                {"sql": "SELECT pid, state, heartbeat FROM WorkerStatus WHERE role=?;", "params": [role]},
+            )
+            rows = resp.get("data") or []
+            if not rows:
+                return None
+            row = rows[0]
+            return {"pid": row.get("pid"), "state": row.get("state"), "heartbeat": row.get("heartbeat")}
+        except Exception:
+            return None
+    cur = conn.cursor()
+    cur.execute("SELECT pid, state, heartbeat FROM WorkerStatus WHERE role=?;", (role,))
+    row = cur.fetchone()
+    if not row:
+        return None
+    return {"pid": row[0], "state": row[1], "heartbeat": row[2]}
+
+
+def pid_alive(pid: Optional[int]) -> bool:
+    if not pid:
+        return False
+    try:
+        return _pid_alive(int(pid))
+    except Exception:
+        return False
 
 
 def claim_role_lock(conn: Optional[sqlite3.Connection], role: str, stale_seconds: int = 30) -> bool:
@@ -289,6 +339,107 @@ def mark_run_status(
     cur = conn.cursor()
     cur.execute(sql, params)
     conn.commit()
+
+
+def _read_log_tail(path: Optional[Path], max_lines: int = 200) -> tuple[str, bool]:
+    if not path:
+        return "", True
+    try:
+        if not path.exists():
+            return "", True
+        with path.open("r", encoding="utf-8", errors="replace") as handle:
+            lines = handle.readlines()
+        tail = "".join(lines[-max_lines:]) if lines else ""
+        return tail, False
+    except Exception:
+        return "", True
+
+
+def append_job_log(path: Optional[Path], message: str) -> None:
+    if not path:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(message.rstrip() + "\n")
+    except Exception:
+        pass
+
+
+def _fetch_run_id(conn: Optional[sqlite3.Connection], run_id_db: int) -> Optional[str]:
+    if broker_enabled():
+        try:
+            resp = broker_query(
+                "sql_query",
+                {"sql": "SELECT runId FROM Run WHERE id=? LIMIT 1;", "params": [run_id_db]},
+            )
+            rows = resp.get("data") or []
+            if rows:
+                return rows[0].get("runId")
+        except Exception:
+            return None
+        return None
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT runId FROM Run WHERE id=? LIMIT 1;", (run_id_db,))
+        row = cur.fetchone()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
+def log_error(
+    conn: Optional[sqlite3.Connection],
+    *,
+    run_id_db: Optional[int] = None,
+    run_id: Optional[str] = None,
+    component: str,
+    stage: str,
+    step: str = "",
+    error_type: str = "unclassified",
+    error_code: str = "",
+    error_message: str = "",
+    error_detail: str = "",
+    log_path: Optional[Path] = None,
+    max_lines: int = 200,
+) -> None:
+    rid = run_id or (run_id_db and _fetch_run_id(conn, run_id_db)) or None
+    tail, missing = _read_log_tail(log_path, max_lines=max_lines)
+    detail = error_detail or ""
+    if missing and "[log_missing]" not in detail:
+        detail = (detail + "\n" if detail else "") + "[log_missing] log tail unavailable"
+        if error_type in {"", "unclassified"}:
+            error_type = "log_missing"
+    sql = (
+        "INSERT INTO ErrorLog (runId, component, stage, step, errorType, errorCode, "
+        "errorMessage, errorDetail, logPath, logTail, logMissing, createdAt) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
+    )
+    params = [
+        rid,
+        component,
+        stage,
+        step,
+        error_type,
+        error_code,
+        error_message,
+        detail,
+        str(log_path) if log_path else None,
+        tail,
+        1 if missing else 0,
+    ]
+    if broker_enabled():
+        try:
+            broker_exec("sql_exec", {"sql": sql, "params": params})
+        except Exception:
+            pass
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        conn.commit()
+    except Exception:
+        pass
 
 
 def fetch_active_run(conn: Optional[sqlite3.Connection]) -> Optional[dict]:

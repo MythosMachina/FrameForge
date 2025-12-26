@@ -93,6 +93,25 @@ def _ensure_tables(conn: sqlite3.Connection) -> None:
         );
         """
     )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ErrorLog (
+            id INTEGER PRIMARY KEY,
+            runId TEXT,
+            component TEXT,
+            stage TEXT,
+            step TEXT,
+            errorType TEXT,
+            errorCode TEXT,
+            errorMessage TEXT,
+            errorDetail TEXT,
+            logPath TEXT,
+            logTail TEXT,
+            logMissing BOOLEAN DEFAULT 0,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    )
     # Ensure Run.trainProfile exists (best-effort, no-op if already present)
     try:
         cur.execute("PRAGMA table_info(Run);")

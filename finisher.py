@@ -16,6 +16,8 @@ from orchestration_common import (
     ensure_tables,
     fetch_next_run,
     get_queue_mode,
+    append_job_log,
+    log_error,
     log,
     mark_run_status,
     set_run_downloads,
@@ -186,6 +188,19 @@ def main() -> None:
             if not dataset_dir.exists():
                 msg = "dataset output missing"
                 mark_run_status(conn, run["id"], "failed_finish", "missing_dataset", error=msg, finished=True)
+                log_path = SYSTEM_ROOT / "logs" / f"finisher_{run['runId']}.log"
+                append_job_log(log_path, msg)
+                log_error(
+                    conn,
+                    run_id_db=run["id"],
+                    component=ROLE,
+                    stage="package_dataset",
+                    step="missing_dataset",
+                    error_type="io_filesystem",
+                    error_code="missing_dataset",
+                    error_message=msg,
+                    log_path=log_path,
+                )
                 set_queue_mode(conn, "paused")
                 log(ROLE, f"{run['runId']} {msg}")
                 time.sleep(POLL_SECONDS)
@@ -197,6 +212,19 @@ def main() -> None:
                 if not has_lora:
                     msg = "lora output missing"
                     mark_run_status(conn, run["id"], "failed_finish", "missing_lora", error=msg, finished=True)
+                    log_path = SYSTEM_ROOT / "logs" / f"finisher_{run['runId']}.log"
+                    append_job_log(log_path, msg)
+                    log_error(
+                        conn,
+                        run_id_db=run["id"],
+                        component=ROLE,
+                        stage="package_lora",
+                        step="missing_lora",
+                        error_type="io_filesystem",
+                        error_code="missing_lora",
+                        error_message=msg,
+                        log_path=log_path,
+                    )
                     set_queue_mode(conn, "paused")
                     log(ROLE, f"{run['runId']} {msg}")
                     time.sleep(POLL_SECONDS)
