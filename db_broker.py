@@ -243,7 +243,7 @@ def _release_notification(
     conn.commit()
 
 
-def _send_email(settings: Dict[str, str], subject: str, body: str) -> None:
+def _send_email(settings: Dict[str, str], subject: str, body: str, html: Optional[str] = None) -> None:
     host = settings.get("smtp_host", "").strip()
     if not host:
         return
@@ -264,6 +264,8 @@ def _send_email(settings: Dict[str, str], subject: str, body: str) -> None:
     msg["To"] = smtp_to
     msg["Date"] = formatdate(localtime=True)
     msg.set_content(body)
+    if html:
+        msg.add_alternative(html, subtype="html")
     timeout = 5
     if use_ssl:
         with smtplib.SMTP_SSL(host, port, timeout=timeout) as server:
@@ -287,6 +289,59 @@ def _is_failed_status(status: str) -> bool:
 
 def _format_ts(val: object) -> str:
     return str(val) if val else "n/a"
+
+
+def _html_escape(text: str) -> str:
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+    )
+
+
+def _render_run_email_html(
+    *,
+    header: str,
+    run_id: str,
+    run_name: str,
+    status: str,
+    last_step: str,
+    created_at: str,
+    started_at: str,
+    finished_at: str,
+    dataset_url: str,
+    lora_url: str,
+    error: str,
+    instance_label: str,
+    instance_url: str,
+) -> str:
+    def _row(label: str, value: str) -> str:
+        return f"<tr><td style=\"padding:6px 10px;color:#8fa2b8;\">{_html_escape(label)}</td><td style=\"padding:6px 10px;color:#f5f7fb;\">{_html_escape(value)}</td></tr>"
+
+    downloads = ""
+    if dataset_url or lora_url:
+        rows = ""
+        if dataset_url:
+            rows += _row("Dataset", dataset_url)
+        if lora_url:
+            rows += _row("LoRA", lora_url)
+        downloads = f\"\"\"\n        <div style=\"margin-top:16px;padding:12px;border-radius:10px;background:#0f1622;border:1px solid #1c2a3a;\">\n          <div style=\"font-weight:700;color:#8fd3ff;margin-bottom:6px;\">Downloads</div>\n          <table style=\"width:100%;border-collapse:collapse;\">{rows}</table>\n        </div>\n        \"\"\"\n+    error_block = ""
+    if error:
+        error_block = f\"\"\"\n        <div style=\"margin-top:16px;padding:12px;border-radius:10px;background:#221416;border:1px solid #3a1c20;color:#ffb3a8;\">\n          <div style=\"font-weight:700;margin-bottom:6px;\">Error</div>\n          <div style=\"white-space:pre-wrap;\">{_html_escape(error)}</div>\n        </div>\n        \"\"\"\n+    instance_line = f\"<a href=\\\"{_html_escape(instance_url)}\\\" style=\\\"color:#8fd3ff;text-decoration:none;\\\">{_html_escape(instance_url)}</a>\" if instance_url else ""
+
+    return f\"\"\"\n+<html>\n+  <body style=\"margin:0;padding:0;background:#0b0f14;font-family:Arial,sans-serif;color:#f5f7fb;\">\n+    <div style=\"max-width:640px;margin:0 auto;padding:24px;\">\n+      <div style=\"padding:18px 20px;border-radius:16px;background:linear-gradient(180deg,#141a22,#0f141b);border:1px solid #1d2a38;\">\n+        <div style=\"font-size:18px;font-weight:700;letter-spacing:0.4px;\">FrameForge</div>\n+        <div style=\"margin-top:6px;font-size:15px;color:#8fd3ff;\">{_html_escape(header)}</div>\n+      </div>\n+      <div style=\"margin-top:16px;padding:18px;border-radius:16px;background:#111720;border:1px solid #1c2a3a;\">\n+        <table style=\"width:100%;border-collapse:collapse;\">\n+          {_row(\"Run\", run_id)}\n+          {_row(\"Name\", run_name)}\n+          {_row(\"Status\", status)}\n+          {_row(\"Last step\", last_step)}\n+          {_row(\"Created\", created_at)}\n+          {_row(\"Started\", started_at)}\n+          {_row(\"Finished\", finished_at)}\n+        </table>\n+        {downloads}\n+        {error_block}\n+      </div>\n+      <div style=\"margin-top:16px;color:#8fa2b8;font-size:12px;\">\n+        <div>{_html_escape(instance_label)}</div>\n+        <div>{instance_line}</div>\n+      </div>\n+    </div>\n+  </body>\n+</html>\n+\"\"\"
+
+
+def _render_queue_email_html(
+    *,
+    queue_mode: str,
+    instance_label: str,
+    instance_url: str,
+) -> str:
+    instance_line = f\"<a href=\\\"{_html_escape(instance_url)}\\\" style=\\\"color:#8fd3ff;text-decoration:none;\\\">{_html_escape(instance_url)}</a>\" if instance_url else ""
+    return f\"\"\"\n+<html>\n+  <body style=\"margin:0;padding:0;background:#0b0f14;font-family:Arial,sans-serif;color:#f5f7fb;\">\n+    <div style=\"max-width:640px;margin:0 auto;padding:24px;\">\n+      <div style=\"padding:18px 20px;border-radius:16px;background:linear-gradient(180deg,#141a22,#0f141b);border:1px solid #1d2a38;\">\n+        <div style=\"font-size:18px;font-weight:700;letter-spacing:0.4px;\">FrameForge</div>\n+        <div style=\"margin-top:6px;font-size:15px;color:#8fd3ff;\">Queue drained</div>\n+      </div>\n+      <div style=\"margin-top:16px;padding:18px;border-radius:16px;background:#111720;border:1px solid #1c2a3a;\">\n+        <div style=\"margin-bottom:10px;color:#c8d2df;\">All workers are idle and no runs are active.</div>\n+        <table style=\"width:100%;border-collapse:collapse;\">\n+          <tr><td style=\"padding:6px 10px;color:#8fa2b8;\">Queue mode</td><td style=\"padding:6px 10px;color:#f5f7fb;\">{_html_escape(queue_mode)}</td></tr>\n+        </table>\n+      </div>\n+      <div style=\"margin-top:16px;color:#8fa2b8;font-size:12px;\">\n+        <div>{_html_escape(instance_label)}</div>\n+        <div>{instance_line}</div>\n+      </div>\n+    </div>\n+  </body>\n+</html>\n+\"\"\"
 
 
 def _log_notification_error(
@@ -463,11 +518,16 @@ def _maybe_notify_queue_finish(conn: sqlite3.Connection, settings: Dict[str, str
     body = "\n".join(body_lines)
     success = False
     if email_ready:
-        try:
-            _send_email(settings, subject, body)
-            success = True
-        except Exception as exc:
-            _log_notification_error(conn, None, "queue finish email failed", str(exc))
+    try:
+        html = _render_queue_email_html(
+            queue_mode=queue_mode,
+            instance_label=instance_label,
+            instance_url=instance_url,
+        )
+        _send_email(settings, subject, body, html)
+        success = True
+    except Exception as exc:
+        _log_notification_error(conn, None, "queue finish email failed", str(exc))
     if discord_ready:
         try:
             fields = [
@@ -624,11 +684,26 @@ def _maybe_notify_run_status(conn: sqlite3.Connection, run_id_db: int, status: s
     body = "\n".join(body_lines)
     success = False
     if email_ready:
-        try:
-            _send_email(settings, subject, body)
-            success = True
-        except Exception as exc:
-            _log_notification_error(conn, run_id, "run email failed", str(exc))
+    try:
+        html = _render_run_email_html(
+            header="Run finished" if notif_type == "job_finish" else "Run failed",
+            run_id=run_id,
+            run_name=str(run.get("runName") or ""),
+            status=str(run.get("status") or status),
+            last_step=str(run.get("lastStep") or ""),
+            created_at=_format_ts(run.get("createdAt")),
+            started_at=_format_ts(run.get("startedAt")),
+            finished_at=_format_ts(run.get("finishedAt")),
+            dataset_url=str(run.get("datasetDownload") or ""),
+            lora_url=str(run.get("loraDownload") or ""),
+            error=str(run.get("error") or ""),
+            instance_label=instance_label,
+            instance_url=instance_url,
+        )
+        _send_email(settings, subject, body, html)
+        success = True
+    except Exception as exc:
+        _log_notification_error(conn, run_id, "run email failed", str(exc))
     if discord_ready:
         try:
             base_url = str(settings.get("instance_url", "") or "").strip()
