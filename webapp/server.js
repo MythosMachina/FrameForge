@@ -42,6 +42,8 @@ const SERVICE_PREFIX = path.basename(BUNDLE_ROOT).toLowerCase().includes('framef
   ? 'frameforge-dev'
   : 'frameforge';
 const SYSTEMD_SERVICES = {
+  broker: `${SERVICE_PREFIX}-db-broker.service`,
+  webapp: `${SERVICE_PREFIX}-webapp.service`,
   initiator: `${SERVICE_PREFIX}-initiator.service`,
   orchestrator: `${SERVICE_PREFIX}-orchestrator.service`,
   finisher: `${SERVICE_PREFIX}-finisher.service`,
@@ -220,6 +222,25 @@ async function getSystemdState(serviceName) {
       resolve(normalizeSystemdState(stdout));
     });
   });
+}
+
+async function getBrokerHealth(timeoutMs = 1500) {
+  if (!DB_BROKER_URL) {
+    return { ok: false, message: 'DB_BROKER_URL not configured' };
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${DB_BROKER_URL}/health`, { signal: controller.signal });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.ok) return { ok: true, message: 'healthy' };
+    return { ok: false, message: data?.error || `health ${res.status}` };
+  } catch (err) {
+    const msg = err?.name === 'AbortError' ? 'health timeout' : err?.message || 'health failed';
+    return { ok: false, message: msg };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function hasRecentTrainProgress(thresholdSeconds = STEP_FRESH_SECS) {
@@ -732,6 +753,46 @@ function roleStatusMessage(role) {
 
 app.get('/api/system/status', async (_req, res) => {
   try {
+    const brokerHealth = await getBrokerHealth();
+    const [webappState, initiatorState, orchestratorState, finisherState] = await Promise.all([
+      getSystemdState(SYSTEMD_SERVICES.webapp),
+      getSystemdState(SYSTEMD_SERVICES.initiator),
+      getSystemdState(SYSTEMD_SERVICES.orchestrator),
+      getSystemdState(SYSTEMD_SERVICES.finisher),
+    ]);
+
+    if (!brokerHealth.ok) {
+      const services = [
+        {
+          name: "WebApp",
+          state: webappState === 'active' ? "Fail" : "Fail",
+          message: webappState === 'active' ? "broker offline" : `service ${webappState}`,
+        },
+        {
+          name: "DB Broker",
+          state: "Fail",
+          message: brokerHealth.message,
+        },
+        {
+          name: "Initiator",
+          state: "Fail",
+          message: "broker offline",
+        },
+        {
+          name: "Orchestrator",
+          state: "Fail",
+          message: "broker offline",
+        },
+        {
+          name: "Finisher",
+          state: "Fail",
+          message: "broker offline",
+        },
+      ];
+      res.json({ services, queueMode: "unknown" });
+      return;
+    }
+
     const mode = await getQueueModeSetting();
     const queued = await dbCountRunsByStatus('queued');
     const queuedInitiated = await dbCountRunsByStatus('queued_initiated');
@@ -743,11 +804,6 @@ app.get('/api/system/status', async (_req, res) => {
     const initiatorWork = queued > 0;
     const finisherWork = readyFinish > 0;
     const stepsFresh = await hasRecentTrainProgress();
-    const [initiatorState, orchestratorState, finisherState] = await Promise.all([
-      getSystemdState(SYSTEMD_SERVICES.initiator),
-      getSystemdState(SYSTEMD_SERVICES.orchestrator),
-      getSystemdState(SYSTEMD_SERVICES.finisher),
-    ]);
 
     const resolveState = (systemdState, hasWork, hasSteps) => {
       if (systemdState !== 'active') return { state: 'Fail', message: `service ${systemdState}` };
@@ -760,7 +816,12 @@ app.get('/api/system/status', async (_req, res) => {
     const orchestrator = resolveState(orchestratorState, orchestratorWork, stepsFresh);
     const finisher = resolveState(finisherState, finisherWork, false);
     const services = [
-      { name: "WebApp", state: "OK", message: mode === "paused" ? "Queue paused" : "" },
+      {
+        name: "WebApp",
+        state: webappState === 'active' ? "OK" : "Fail",
+        message: webappState === 'active' ? (mode === "paused" ? "Queue paused" : "running") : `service ${webappState}`,
+      },
+      { name: "DB Broker", state: "OK", message: "healthy" },
       {
         name: "Initiator",
         state: initiator.state,
@@ -785,24 +846,29 @@ app.get('/api/system/status', async (_req, res) => {
 });
 
 app.get('/api/queue', async (_req, res) => {
-  const queuedItems = await dbFindQueuedRuns();
-  const activeItems = await dbFindRunsByStatuses(
-    ['queued_initiated', 'running', 'ready_for_finish', 'manual_tagging', 'ready_to_train'],
-    "createdAt ASC, id ASC"
-  );
-  const items = [...queuedItems, ...activeItems];
-  const runIds = items.map((r) => r.runId);
-  const progressMap = await readTrainProgress(runIds);
-  const queue = items.map((r) => {
-    const run = withParsedFlags(r);
-    const progress = progressMap[run.runId] || parseTrainProgress(run.lastStep);
-    if (progress) run.trainProgress = progress;
-    if (run.flags?.train) {
-      run.trainEpochs = getTrainEpochs(run.runName);
-    }
-    return run;
-  });
-  res.json({ queue });
+  try {
+    const queuedItems = await dbFindQueuedRuns();
+    const activeItems = await dbFindRunsByStatuses(
+      ['queued_initiated', 'running', 'ready_for_finish', 'manual_tagging', 'ready_to_train'],
+      "createdAt ASC, id ASC"
+    );
+    const items = [...queuedItems, ...activeItems];
+    const runIds = items.map((r) => r.runId);
+    const progressMap = await readTrainProgress(runIds);
+    const queue = items.map((r) => {
+      const run = withParsedFlags(r);
+      const progress = progressMap[run.runId] || parseTrainProgress(run.lastStep);
+      if (progress) run.trainProgress = progress;
+      if (run.flags?.train) {
+        run.trainEpochs = getTrainEpochs(run.runName);
+      }
+      return run;
+    });
+    res.json({ queue });
+  } catch (err) {
+    console.error('[queue] failed', err);
+    res.status(500).json({ error: 'failed to load queue' });
+  }
 });
 
 app.post('/api/queue/reorder', async (req, res) => {
@@ -826,23 +892,28 @@ app.post('/api/queue/reorder', async (req, res) => {
 });
 
 app.get('/api/history', async (_req, res) => {
-  const items = await dbFindRunsByStatuses(
-    ['done', 'failed', 'failed_initiator', 'failed_worker', 'failed_finish'],
-    "finishedAt DESC",
-    50
-  );
-  const runIds = items.map((r) => r.runId);
-  const progressMap = await readTrainProgress(runIds);
-  const history = items.map((r) => {
-    const run = withParsedFlags(r);
-    const progress = progressMap[run.runId] || parseTrainProgress(run.lastStep);
-    if (progress) run.trainProgress = progress;
-    if (run.flags?.train) {
-      run.trainEpochs = getTrainEpochs(run.runName);
-    }
-    return run;
-  });
-  res.json({ history });
+  try {
+    const items = await dbFindRunsByStatuses(
+      ['done', 'failed', 'failed_initiator', 'failed_worker', 'failed_finish'],
+      "finishedAt DESC",
+      50
+    );
+    const runIds = items.map((r) => r.runId);
+    const progressMap = await readTrainProgress(runIds);
+    const history = items.map((r) => {
+      const run = withParsedFlags(r);
+      const progress = progressMap[run.runId] || parseTrainProgress(run.lastStep);
+      if (progress) run.trainProgress = progress;
+      if (run.flags?.train) {
+        run.trainEpochs = getTrainEpochs(run.runName);
+      }
+      return run;
+    });
+    res.json({ history });
+  } catch (err) {
+    console.error('[history] failed', err);
+    res.status(500).json({ error: 'failed to load history' });
+  }
 });
 
 app.get('/api/run/:id/progress', async (req, res) => {
@@ -1638,10 +1709,17 @@ app.get('/api/download/:file', (req, res) => {
 });
 
 app.listen(PORT, HOST, async () => {
-  await resetStaleRuns();
-  await seedSettings();
-  await seedTrainProfiles();
-  await refreshModelSizes();
+  const safeInit = async (label, fn) => {
+    try {
+      await fn();
+    } catch (err) {
+      console.error(`[init] ${label} failed`, err);
+    }
+  };
+  await safeInit('reset-stale-runs', resetStaleRuns);
+  await safeInit('seed-settings', seedSettings);
+  await safeInit('seed-train-profiles', seedTrainProfiles);
+  await safeInit('refresh-model-sizes', refreshModelSizes);
   log(`[init] FrameForge web app listening on http://${HOST}:${PORT}`);
   log("[init] In-app queue runner disabled");
   setInterval(cleanStagedUploads, 60000);
