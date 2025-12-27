@@ -318,7 +318,10 @@ def _render_run_email_html(
     instance_url: str,
 ) -> str:
     def _row(label: str, value: str) -> str:
-        return f"<tr><td style=\"padding:6px 10px;color:#8fa2b8;\">{_html_escape(label)}</td><td style=\"padding:6px 10px;color:#f5f7fb;\">{_html_escape(value)}</td></tr>"
+        return (
+            f"<tr><td style='padding:6px 10px;color:#8fa2b8;'>{_html_escape(label)}</td>"
+            f"<td style='padding:6px 10px;color:#f5f7fb;'>{_html_escape(value)}</td></tr>"
+        )
 
     downloads = ""
     if dataset_url or lora_url:
@@ -327,12 +330,68 @@ def _render_run_email_html(
             rows += _row("Dataset", dataset_url)
         if lora_url:
             rows += _row("LoRA", lora_url)
-        downloads = f\"\"\"\n        <div style=\"margin-top:16px;padding:12px;border-radius:10px;background:#0f1622;border:1px solid #1c2a3a;\">\n          <div style=\"font-weight:700;color:#8fd3ff;margin-bottom:6px;\">Downloads</div>\n          <table style=\"width:100%;border-collapse:collapse;\">{rows}</table>\n        </div>\n        \"\"\"\n+    error_block = ""
+        downloads = f"""
+        <div style="margin-top:16px;padding:12px;border-radius:10px;background:#0f1622;border:1px solid #1c2a3a;">
+          <div style="font-weight:700;color:#8fd3ff;margin-bottom:6px;">Downloads</div>
+          <table style="width:100%;border-collapse:collapse;">{rows}</table>
+        </div>
+        """
+    error_block = ""
     if error:
-        error_block = f\"\"\"\n        <div style=\"margin-top:16px;padding:12px;border-radius:10px;background:#221416;border:1px solid #3a1c20;color:#ffb3a8;\">\n          <div style=\"font-weight:700;margin-bottom:6px;\">Error</div>\n          <div style=\"white-space:pre-wrap;\">{_html_escape(error)}</div>\n        </div>\n        \"\"\"\n+    instance_line = f\"<a href=\\\"{_html_escape(instance_url)}\\\" style=\\\"color:#8fd3ff;text-decoration:none;\\\">{_html_escape(instance_url)}</a>\" if instance_url else ""
+        error_block = f"""
+        <div style="margin-top:16px;padding:12px;border-radius:10px;background:#221416;border:1px solid #3a1c20;color:#ffb3a8;">
+          <div style="font-weight:700;margin-bottom:6px;">Error</div>
+          <div style="white-space:pre-wrap;">{_html_escape(error)}</div>
+        </div>
+        """
+    instance_line = (
+        f"<a href='{_html_escape(instance_url)}' style='color:#8fd3ff;text-decoration:none;'>"
+        f"{_html_escape(instance_url)}</a>"
+        if instance_url
+        else ""
+    )
 
-    return f\"\"\"\n+<html>\n+  <body style=\"margin:0;padding:0;background:#0b0f14;font-family:Arial,sans-serif;color:#f5f7fb;\">\n+    <div style=\"max-width:640px;margin:0 auto;padding:24px;\">\n+      <div style=\"padding:18px 20px;border-radius:16px;background:linear-gradient(180deg,#141a22,#0f141b);border:1px solid #1d2a38;\">\n+        <div style=\"font-size:18px;font-weight:700;letter-spacing:0.4px;\">FrameForge</div>\n+        <div style=\"margin-top:6px;font-size:15px;color:#8fd3ff;\">{_html_escape(header)}</div>\n+      </div>\n+      <div style=\"margin-top:16px;padding:18px;border-radius:16px;background:#111720;border:1px solid #1c2a3a;\">\n+        <table style=\"width:100%;border-collapse:collapse;\">\n+          {_row(\"Run\", run_id)}\n+          {_row(\"Name\", run_name)}\n+          {_row(\"Status\", status)}\n+          {_row(\"Last step\", last_step)}\n+          {_row(\"Created\", created_at)}\n+          {_row(\"Started\", started_at)}\n+          {_row(\"Finished\", finished_at)}\n+        </table>\n+        {downloads}\n+        {error_block}\n+      </div>\n+      <div style=\"margin-top:16px;color:#8fa2b8;font-size:12px;\">\n+        <div>{_html_escape(instance_label)}</div>\n+        <div>{instance_line}</div>\n+      </div>\n+    </div>\n+  </body>\n+</html>\n+\"\"\"
-
+    return f"""
+<html>
+  <body style="margin:0;padding:0;background:#0b0f14;font-family:Arial,sans-serif;color:#f5f7fb;">
+    <div style="max-width:640px;margin:0 auto;padding:24px;">
+      <div style="padding:18px 20px;border-radius:16px;background:linear-gradient(180deg,#141a22,#0f141b);border:1px solid #1d2a38;">
+        <table role="presentation" style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="width:28px;vertical-align:middle;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 100 100" role="img" aria-label="FrameForge">
+                <path fill="#d58c3f" d="M64.6 12.8l5.4 9.3c3.1-0.3 6.3-0.3 9.4 0l5.4-9.3 11.3 6.5-5.4 9.3c2.2 2.2 4.1 4.6 5.7 7.3l10.7-2.1 3.3 12.7-10.7 2.1c0.3 3.1 0.3 6.3 0 9.4l10.7 2.1-3.3 12.7-10.7-2.1c-1.6 2.7-3.5 5.1-5.7 7.3l5.4 9.3-11.3 6.5-5.4-9.3c-3.1 0.3-6.3 0.3-9.4 0l-5.4 9.3-11.3-6.5 5.4-9.3c-2.2-2.2-4.1-4.6-5.7-7.3l-10.7 2.1-3.3-12.7 10.7-2.1c-0.3-3.1-0.3-6.3 0-9.4l-10.7-2.1 3.3-12.7 10.7 2.1c1.6-2.7 3.5-5.1 5.7-7.3l-5.4-9.3 11.3-6.5 5.4 9.3c3.1-0.3 6.3-0.3 9.4 0l5.4-9.3 11.3 6.5zM50 35c-8.3 0-15 6.7-15 15s6.7 15 15 15 15-6.7 15-15-6.7-15-15-15z"/>
+              </svg>
+            </td>
+            <td style="padding-left:10px;vertical-align:middle;">
+              <div style="font-size:18px;font-weight:700;letter-spacing:0.4px;">FrameForge</div>
+              <div style="margin-top:2px;font-size:11px;letter-spacing:1px;color:#8fa2b8;text-transform:uppercase;">automate. refine. deliver.</div>
+            </td>
+          </tr>
+        </table>
+        <div style="margin-top:10px;font-size:15px;color:#8fd3ff;">{_html_escape(header)}</div>
+      </div>
+      <div style="margin-top:16px;padding:18px;border-radius:16px;background:#111720;border:1px solid #1c2a3a;">
+        <table style="width:100%;border-collapse:collapse;">
+          {_row("Run", run_id)}
+          {_row("Name", run_name)}
+          {_row("Status", status)}
+          {_row("Last step", last_step)}
+          {_row("Created", created_at)}
+          {_row("Started", started_at)}
+          {_row("Finished", finished_at)}
+        </table>
+        {downloads}
+        {error_block}
+      </div>
+      <div style="margin-top:16px;color:#8fa2b8;font-size:12px;">
+        <div>{_html_escape(instance_label)}</div>
+        <div>{instance_line}</div>
+      </div>
+    </div>
+  </body>
+</html>
+"""
 
 def _render_queue_email_html(
     *,
@@ -340,9 +399,46 @@ def _render_queue_email_html(
     instance_label: str,
     instance_url: str,
 ) -> str:
-    instance_line = f\"<a href=\\\"{_html_escape(instance_url)}\\\" style=\\\"color:#8fd3ff;text-decoration:none;\\\">{_html_escape(instance_url)}</a>\" if instance_url else ""
-    return f\"\"\"\n+<html>\n+  <body style=\"margin:0;padding:0;background:#0b0f14;font-family:Arial,sans-serif;color:#f5f7fb;\">\n+    <div style=\"max-width:640px;margin:0 auto;padding:24px;\">\n+      <div style=\"padding:18px 20px;border-radius:16px;background:linear-gradient(180deg,#141a22,#0f141b);border:1px solid #1d2a38;\">\n+        <div style=\"font-size:18px;font-weight:700;letter-spacing:0.4px;\">FrameForge</div>\n+        <div style=\"margin-top:6px;font-size:15px;color:#8fd3ff;\">Queue drained</div>\n+      </div>\n+      <div style=\"margin-top:16px;padding:18px;border-radius:16px;background:#111720;border:1px solid #1c2a3a;\">\n+        <div style=\"margin-bottom:10px;color:#c8d2df;\">All workers are idle and no runs are active.</div>\n+        <table style=\"width:100%;border-collapse:collapse;\">\n+          <tr><td style=\"padding:6px 10px;color:#8fa2b8;\">Queue mode</td><td style=\"padding:6px 10px;color:#f5f7fb;\">{_html_escape(queue_mode)}</td></tr>\n+        </table>\n+      </div>\n+      <div style=\"margin-top:16px;color:#8fa2b8;font-size:12px;\">\n+        <div>{_html_escape(instance_label)}</div>\n+        <div>{instance_line}</div>\n+      </div>\n+    </div>\n+  </body>\n+</html>\n+\"\"\"
-
+    instance_line = (
+        f"<a href='{_html_escape(instance_url)}' style='color:#8fd3ff;text-decoration:none;'>"
+        f"{_html_escape(instance_url)}</a>"
+        if instance_url
+        else ""
+    )
+    return f"""
+<html>
+  <body style="margin:0;padding:0;background:#0b0f14;font-family:Arial,sans-serif;color:#f5f7fb;">
+    <div style="max-width:640px;margin:0 auto;padding:24px;">
+      <div style="padding:18px 20px;border-radius:16px;background:linear-gradient(180deg,#141a22,#0f141b);border:1px solid #1d2a38;">
+        <table role="presentation" style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="width:28px;vertical-align:middle;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 100 100" role="img" aria-label="FrameForge">
+                <path fill="#d58c3f" d="M64.6 12.8l5.4 9.3c3.1-0.3 6.3-0.3 9.4 0l5.4-9.3 11.3 6.5-5.4 9.3c2.2 2.2 4.1 4.6 5.7 7.3l10.7-2.1 3.3 12.7-10.7 2.1c0.3 3.1 0.3 6.3 0 9.4l10.7 2.1-3.3 12.7-10.7-2.1c-1.6 2.7-3.5 5.1-5.7 7.3l5.4 9.3-11.3 6.5-5.4-9.3c-3.1 0.3-6.3 0.3-9.4 0l-5.4 9.3-11.3-6.5 5.4-9.3c-2.2-2.2-4.1-4.6-5.7-7.3l-10.7 2.1-3.3-12.7 10.7-2.1c-0.3-3.1-0.3-6.3 0-9.4l-10.7-2.1 3.3-12.7 10.7 2.1c1.6-2.7 3.5-5.1 5.7-7.3l-5.4-9.3 11.3-6.5 5.4 9.3c3.1-0.3 6.3-0.3 9.4 0l5.4-9.3 11.3 6.5zM50 35c-8.3 0-15 6.7-15 15s6.7 15 15 15 15-6.7 15-15-6.7-15-15-15z"/>
+              </svg>
+            </td>
+            <td style="padding-left:10px;vertical-align:middle;">
+              <div style="font-size:18px;font-weight:700;letter-spacing:0.4px;">FrameForge</div>
+              <div style="margin-top:2px;font-size:11px;letter-spacing:1px;color:#8fa2b8;text-transform:uppercase;">automate. refine. deliver.</div>
+            </td>
+          </tr>
+        </table>
+        <div style="margin-top:10px;font-size:15px;color:#8fd3ff;">Queue drained</div>
+      </div>
+      <div style="margin-top:16px;padding:18px;border-radius:16px;background:#111720;border:1px solid #1c2a3a;">
+        <div style="margin-bottom:10px;color:#c8d2df;">All workers are idle and no runs are active.</div>
+        <table style="width:100%;border-collapse:collapse;">
+          <tr><td style="padding:6px 10px;color:#8fa2b8;">Queue mode</td><td style="padding:6px 10px;color:#f5f7fb;">{_html_escape(queue_mode)}</td></tr>
+        </table>
+      </div>
+      <div style="margin-top:16px;color:#8fa2b8;font-size:12px;">
+        <div>{_html_escape(instance_label)}</div>
+        <div>{instance_line}</div>
+      </div>
+    </div>
+  </body>
+</html>
+"""
 
 def _log_notification_error(
     conn: sqlite3.Connection,
@@ -518,16 +614,16 @@ def _maybe_notify_queue_finish(conn: sqlite3.Connection, settings: Dict[str, str
     body = "\n".join(body_lines)
     success = False
     if email_ready:
-    try:
-        html = _render_queue_email_html(
-            queue_mode=queue_mode,
-            instance_label=instance_label,
-            instance_url=instance_url,
-        )
-        _send_email(settings, subject, body, html)
-        success = True
-    except Exception as exc:
-        _log_notification_error(conn, None, "queue finish email failed", str(exc))
+        try:
+            html = _render_queue_email_html(
+                queue_mode=queue_mode,
+                instance_label=instance_label,
+                instance_url=instance_url,
+            )
+            _send_email(settings, subject, body, html)
+            success = True
+        except Exception as exc:
+            _log_notification_error(conn, None, "queue finish email failed", str(exc))
     if discord_ready:
         try:
             fields = [
@@ -684,26 +780,26 @@ def _maybe_notify_run_status(conn: sqlite3.Connection, run_id_db: int, status: s
     body = "\n".join(body_lines)
     success = False
     if email_ready:
-    try:
-        html = _render_run_email_html(
-            header="Run finished" if notif_type == "job_finish" else "Run failed",
-            run_id=run_id,
-            run_name=str(run.get("runName") or ""),
-            status=str(run.get("status") or status),
-            last_step=str(run.get("lastStep") or ""),
-            created_at=_format_ts(run.get("createdAt")),
-            started_at=_format_ts(run.get("startedAt")),
-            finished_at=_format_ts(run.get("finishedAt")),
-            dataset_url=str(run.get("datasetDownload") or ""),
-            lora_url=str(run.get("loraDownload") or ""),
-            error=str(run.get("error") or ""),
-            instance_label=instance_label,
-            instance_url=instance_url,
-        )
-        _send_email(settings, subject, body, html)
-        success = True
-    except Exception as exc:
-        _log_notification_error(conn, run_id, "run email failed", str(exc))
+        try:
+            html = _render_run_email_html(
+                header="Run finished" if notif_type == "job_finish" else "Run failed",
+                run_id=run_id,
+                run_name=str(run.get("runName") or ""),
+                status=str(run.get("status") or status),
+                last_step=str(run.get("lastStep") or ""),
+                created_at=_format_ts(run.get("createdAt")),
+                started_at=_format_ts(run.get("startedAt")),
+                finished_at=_format_ts(run.get("finishedAt")),
+                dataset_url=str(run.get("datasetDownload") or ""),
+                lora_url=str(run.get("loraDownload") or ""),
+                error=str(run.get("error") or ""),
+                instance_label=instance_label,
+                instance_url=instance_url,
+            )
+            _send_email(settings, subject, body, html)
+            success = True
+        except Exception as exc:
+            _log_notification_error(conn, run_id, "run email failed", str(exc))
     if discord_ready:
         try:
             base_url = str(settings.get("instance_url", "") or "").strip()
