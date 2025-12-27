@@ -75,6 +75,28 @@ const SETTINGS_KEYS = [
   "output_max_images",
   "hf_token",
   "autotag_model_id",
+  "notifications_enabled",
+  "notify_channel_email",
+  "notify_channel_slack",
+  "notify_channel_discord",
+  "notify_channel_webhook",
+  "notify_job_finish",
+  "notify_job_failed",
+  "notify_queue_finish",
+  "smtp_host",
+  "smtp_port",
+  "smtp_user",
+  "smtp_pass",
+  "smtp_tls",
+  "smtp_ssl",
+  "smtp_from",
+  "smtp_to",
+  "instance_label",
+  "instance_url",
+  "slack_webhook_url",
+  "discord_webhook_url",
+  "webhook_url",
+  "webhook_secret",
   ...TRAINER_KEYS,
 ];
 
@@ -885,8 +907,10 @@ function wireTrainProfileEditor() {
 
 function wireSettings() {
   const saveBtn = document.getElementById("settings-save");
+  const saveNotifyBtn = document.getElementById("settings-save-notify");
   const pruneBtn = document.getElementById("settings-prune");
   const msgEl = document.getElementById("settings-msg");
+  const msgElNotify = document.getElementById("settings-msg-notify");
   const queueMsg = document.getElementById("queue-msg");
   const queueModeEl = document.getElementById("queue-mode");
   const queueStatusText = document.getElementById("queue-status-text");
@@ -909,9 +933,14 @@ function wireSettings() {
   const settingsCache = {};
 
   const setMsg = (text, cls = "") => {
-    if (!msgEl) return;
-    msgEl.textContent = text;
-    msgEl.className = `status-msg ${cls}`;
+    if (msgEl) {
+      msgEl.textContent = text;
+      msgEl.className = `status-msg ${cls}`;
+    }
+    if (msgElNotify) {
+      msgElNotify.textContent = text;
+      msgElNotify.className = `status-msg ${cls}`;
+    }
   };
 
   const setQueueMsg = (text, cls = "") => {
@@ -997,6 +1026,10 @@ function wireSettings() {
         payload[key] = input.checked;
       } else {
         const val = input.value;
+        if (val === "") {
+          payload[key] = "";
+          return;
+        }
         const num = Number(val);
         payload[key] = Number.isFinite(num) ? num : val;
       }
@@ -1020,22 +1053,27 @@ function wireSettings() {
   if (queueRestart) queueRestart.addEventListener("click", () => updateQueueState("restart"));
   if (queueRefresh) queueRefresh.addEventListener("click", () => loadQueueState());
 
+  const saveSettings = async () => {
+    setMsg("Saving...");
+    try {
+      const payload = collectSettings();
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setMsg("Saved", "ok");
+    } catch (err) {
+      setMsg(err.message || "Save failed", "error");
+    }
+  };
+
   if (saveBtn) {
-    saveBtn.addEventListener("click", async () => {
-      setMsg("Saving...");
-      try {
-        const payload = collectSettings();
-        const res = await fetch("/api/settings", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) throw new Error("Save failed");
-        setMsg("Saved", "ok");
-      } catch (err) {
-        setMsg(err.message || "Save failed", "error");
-      }
-    });
+    saveBtn.addEventListener("click", saveSettings);
+  }
+  if (saveNotifyBtn) {
+    saveNotifyBtn.addEventListener("click", saveSettings);
   }
 
   if (pruneBtn) {

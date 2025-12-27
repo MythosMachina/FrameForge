@@ -281,33 +281,42 @@
 
       <section data-section="settings" class="panel hidden">
         <div class="panel-header">
-          <div class="settings-tabs">
-            <button class="tab active" data-tab="settings-main">Settings</button>
-            <button class="tab" data-tab="settings-tagger">Tagger Model Changer</button>
-          </div>
+          <h2>Settings</h2>
           <p>Pipeline knobs (stored in DB). Applied on next run; Launch uses current values.</p>
         </div>
-        <div class="settings-tab" data-tab-panel="settings-main">
-          <div class="queue-control">
-            <div class="queue-meta">
-              <div>
-                <div class="name">Queue Mode</div>
-                <div class="muted small">Start/Pause/Stop orchestrator processing.</div>
+        <div class="settings-shell">
+          <aside class="settings-rail">
+            <div class="settings-rail-card">
+              <div class="settings-rail-title">Queue Control</div>
+              <div class="queue-control">
+                <div class="queue-meta">
+                  <div>
+                    <div class="name">Queue Mode</div>
+                    <div class="muted small">Start/Pause/Stop orchestrator processing.</div>
+                  </div>
+                  <div class="pill" id="queue-mode">–</div>
+                </div>
+                <div class="muted small" id="queue-status-text">status: unknown</div>
+                <div class="muted small">Active run: <span id="queue-active">–</span></div>
+                <div class="queue-actions">
+                  <button class="btn" id="queue-start">Start</button>
+                  <button class="btn" id="queue-pause">Pause</button>
+                  <button class="btn" id="queue-stop">Stop</button>
+                  <button class="btn" id="queue-restart">Restart</button>
+                  <button class="btn" id="queue-refresh">Refresh</button>
+                </div>
+                <div class="status-msg" id="queue-msg"></div>
               </div>
-              <div class="pill" id="queue-mode">–</div>
             </div>
-            <div class="muted small" id="queue-status-text">status: unknown</div>
-            <div class="muted small">Active run: <span id="queue-active">–</span></div>
-            <div class="queue-actions">
-              <button class="btn" id="queue-start">Start</button>
-              <button class="btn" id="queue-pause">Pause</button>
-              <button class="btn" id="queue-stop">Stop</button>
-              <button class="btn" id="queue-restart">Restart</button>
-              <button class="btn" id="queue-refresh">Refresh</button>
+            <div class="settings-tabs">
+              <button class="tab active" data-tab="settings-main">Core</button>
+              <button class="tab" data-tab="settings-tagger">Tagger</button>
+              <button class="tab" data-tab="settings-notifications">Notifications</button>
             </div>
-            <div class="status-msg" id="queue-msg"></div>
-          </div>
-          <div class="settings-grid">
+          </aside>
+          <div class="settings-content">
+            <div class="settings-tab" data-tab-panel="settings-main">
+              <div class="settings-grid">
             <div class="setting-group">
               <div class="group-head">
                 <span>Capping</span>
@@ -403,69 +412,245 @@
               </label>
             </div>
           </div>
-          <div class="actions" style="margin-top: 12px;">
-            <button class="btn primary" id="settings-save">Save Settings</button>
-            <button class="btn danger" id="settings-prune">Prune Workdirs</button>
-            <div class="status-msg" id="settings-msg"></div>
-            <div class="hint">Prune clears work/staging/final folders and jobs. Not reversible.</div>
-          </div>
-        </div>
-        <div class="settings-tab hidden" data-tab-panel="settings-tagger">
-          <div class="setting-group">
-            <div class="group-head">
-              <span>Hugging Face</span>
-              <span class="info" data-tip="Token is stored in DB and used for model downloads.">i</span>
-            </div>
-            <label class="setting-row">
-              <div>
-                <div class="name">HF token</div>
-                <div class="muted small">Needed for private models or higher rate limits.</div>
+              <div class="actions" style="margin-top: 12px;">
+                <button class="btn primary" id="settings-save">Save Settings</button>
+                <button class="btn danger" id="settings-prune">Prune Workdirs</button>
+                <div class="status-msg" id="settings-msg"></div>
+                <div class="hint">Prune clears work/staging/final folders and jobs. Not reversible.</div>
               </div>
-              <input type="password" id="setting-hf_token" placeholder="hf_...">
-            </label>
-          </div>
-          <div class="setting-group">
-            <div class="group-head">
-              <span>Download / Switch model</span>
-              <span class="info" data-tip="Provide a repo id or full HF link. Downloads config, tags, and weights.">i</span>
             </div>
-            <label class="setting-row">
-              <div>
-                <div class="name">Quick picks</div>
-                <div class="muted small">Choose a curated tagger by style.</div>
+            <div class="settings-tab hidden" data-tab-panel="settings-tagger">
+              <div class="setting-group">
+                <div class="group-head">
+                  <span>Hugging Face</span>
+                  <span class="info" data-tip="Token is stored in DB and used for model downloads.">i</span>
+                </div>
+                <label class="setting-row">
+                  <div>
+                    <div class="name">HF token</div>
+                    <div class="muted small">Needed for private models or higher rate limits.</div>
+                  </div>
+                  <input type="password" id="setting-hf_token" placeholder="hf_...">
+                </label>
               </div>
-              <select id="tagger-preset">
-                <option value="">Select a model...</option>
-                <optgroup label="General">
-                  <option value="SmilingWolf/wd-eva02-large-tagger-v3">EVA02 Large (default)</option>
-                </optgroup>
-                <optgroup label="Anime">
-                  <option value="SmilingWolf/wd-swinv2-tagger-v3">SwinV2 (anime-leaning)</option>
-                  <option value="SmilingWolf/wd-convnext-tagger-v3">ConvNeXt (anime-leaning)</option>
-                </optgroup>
-                <optgroup label="Realistic">
-                  <option value="SmilingWolf/wd-swinv2-tagger-v3">SwinV2 (realistic)</option>
-                  <option value="SmilingWolf/wd-convnext-tagger-v3">ConvNeXt (realistic)</option>
-                </optgroup>
-              </select>
-            </label>
-            <div class="muted small" id="tagger-preset-status"></div>
-            <label class="field">
-              <span>Repo ID or link</span>
-              <input type="text" id="tagger-repo-id" placeholder="e.g. SmilingWolf/wd-eva02-large-tagger-v3">
-            </label>
-            <div class="actions">
-              <button class="btn primary" id="tagger-download">Download / Refresh</button>
-              <div class="status-msg" id="tagger-msg"></div>
+              <div class="setting-group">
+                <div class="group-head">
+                  <span>Download / Switch model</span>
+                  <span class="info" data-tip="Provide a repo id or full HF link. Downloads config, tags, and weights.">i</span>
+                </div>
+                <label class="setting-row">
+                  <div>
+                    <div class="name">Quick picks</div>
+                    <div class="muted small">Choose a curated tagger by style.</div>
+                  </div>
+                  <select id="tagger-preset">
+                    <option value="">Select a model...</option>
+                    <optgroup label="General">
+                      <option value="SmilingWolf/wd-eva02-large-tagger-v3">EVA02 Large (default)</option>
+                    </optgroup>
+                    <optgroup label="Anime">
+                      <option value="SmilingWolf/wd-swinv2-tagger-v3">SwinV2 (anime-leaning)</option>
+                      <option value="SmilingWolf/wd-convnext-tagger-v3">ConvNeXt (anime-leaning)</option>
+                    </optgroup>
+                    <optgroup label="Realistic">
+                      <option value="SmilingWolf/wd-swinv2-tagger-v3">SwinV2 (realistic)</option>
+                      <option value="SmilingWolf/wd-convnext-tagger-v3">ConvNeXt (realistic)</option>
+                    </optgroup>
+                  </select>
+                </label>
+                <div class="muted small" id="tagger-preset-status"></div>
+                <label class="field">
+                  <span>Repo ID or link</span>
+                  <input type="text" id="tagger-repo-id" placeholder="e.g. SmilingWolf/wd-eva02-large-tagger-v3">
+                </label>
+                <div class="actions">
+                  <button class="btn primary" id="tagger-download">Download / Refresh</button>
+                  <div class="status-msg" id="tagger-msg"></div>
+                </div>
+              </div>
+              <div class="setting-group">
+                <div class="group-head">
+                  <span>Local models</span>
+                  <span class="info" data-tip="Models stored under storage/tagger_models.">i</span>
+                </div>
+                <p class="muted small">Current default: <span id="tagger-default">unknown</span></p>
+                <div id="tagger-model-list" class="cards"></div>
+              </div>
+            </div>
+            <div class="settings-tab hidden" data-tab-panel="settings-notifications">
+              <div class="settings-grid">
+            <div class="setting-group">
+              <div class="group-head">
+                <span>Enable</span>
+                <span class="info" data-tip="Master switch plus per-event controls.">i</span>
+              </div>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Notifications enabled</div>
+                  <div class="muted small">Master switch for all notifications.</div>
+                </div>
+                <input type="checkbox" id="setting-notifications_enabled">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Instance label</div>
+                  <div class="muted small">Shown in notification footers.</div>
+                </div>
+                <input type="text" id="setting-instance_label" placeholder="FrameForge">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Instance URL</div>
+                  <div class="muted small">Link target for notifications.</div>
+                </div>
+                <input type="text" id="setting-instance_url" placeholder="https://frameforge.example.com">
+              </label>
+            </div>
+            <div class="setting-group">
+              <div class="group-head">
+                <span>Channels</span>
+                <span class="info" data-tip="Choose which channels receive notifications.">i</span>
+              </div>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Email (SMTP)</div>
+                  <div class="muted small">Enable SMTP delivery.</div>
+                </div>
+                <input type="checkbox" id="setting-notify_channel_email">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Slack</div>
+                  <div class="muted small">Webhook delivery.</div>
+                </div>
+                <input type="checkbox" id="setting-notify_channel_slack">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Discord</div>
+                  <div class="muted small">Webhook delivery.</div>
+                </div>
+                <input type="checkbox" id="setting-notify_channel_discord">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Generic Webhook</div>
+                  <div class="muted small">POST JSON payload to your endpoint (planned).</div>
+                </div>
+                <input type="checkbox" id="setting-notify_channel_webhook">
+              </label>
+              <label class="field">
+                <span>Slack webhook URL</span>
+                <input type="text" id="setting-slack_webhook_url" placeholder="https://hooks.slack.com/...">
+              </label>
+              <label class="field">
+                <span>Discord webhook URL</span>
+                <input type="text" id="setting-discord_webhook_url" placeholder="https://discord.com/api/webhooks/...">
+              </label>
+              <label class="field">
+                <span>Webhook URL</span>
+                <input type="text" id="setting-webhook_url" placeholder="https://example.com/notify">
+              </label>
+              <label class="field">
+                <span>Webhook secret</span>
+                <input type="password" id="setting-webhook_secret" placeholder="optional">
+              </label>
+            </div>
+            <div class="setting-group">
+              <div class="group-head">
+                <span>Events</span>
+                <span class="info" data-tip="Choose which events trigger notifications.">i</span>
+              </div>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Job finished</div>
+                  <div class="muted small">Run transitions to done.</div>
+                </div>
+                <input type="checkbox" id="setting-notify_job_finish">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Job failed</div>
+                  <div class="muted small">Run transitions to failed_*.</div>
+                </div>
+                <input type="checkbox" id="setting-notify_job_failed">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Queue drained</div>
+                  <div class="muted small">No active runs and workers idle.</div>
+                </div>
+                <input type="checkbox" id="setting-notify_queue_finish">
+              </label>
+            </div>
+            <div class="setting-group">
+              <div class="group-head">
+                <span>SMTP</span>
+                <span class="info" data-tip="SMTP credentials for email delivery.">i</span>
+              </div>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Host</div>
+                  <div class="muted small">SMTP server hostname.</div>
+                </div>
+                <input type="text" id="setting-smtp_host" placeholder="smtp.example.com">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Port</div>
+                  <div class="muted small">587 (STARTTLS) or 465 (SSL).</div>
+                </div>
+                <input type="number" id="setting-smtp_port" min="1" max="65535" step="1">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Username</div>
+                  <div class="muted small">Leave empty if not required.</div>
+                </div>
+                <input type="text" id="setting-smtp_user" placeholder="user@example.com">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Password</div>
+                  <div class="muted small">Stored in DB (masked in UI).</div>
+                </div>
+                <input type="password" id="setting-smtp_pass" placeholder="••••••••">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Use STARTTLS</div>
+                  <div class="muted small">Enable TLS upgrade.</div>
+                </div>
+                <input type="checkbox" id="setting-smtp_tls">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">Use SSL</div>
+                  <div class="muted small">Implicit SSL (disable STARTTLS).</div>
+                </div>
+                <input type="checkbox" id="setting-smtp_ssl">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">From</div>
+                  <div class="muted small">Sender address.</div>
+                </div>
+                <input type="text" id="setting-smtp_from" placeholder="FrameForge <noreply@example.com>">
+              </label>
+              <label class="setting-row">
+                <div>
+                  <div class="name">To</div>
+                  <div class="muted small">Recipient address.</div>
+                </div>
+                <input type="text" id="setting-smtp_to" placeholder="you@example.com">
+              </label>
             </div>
           </div>
-          <div class="setting-group">
-            <div class="group-head">
-              <span>Local models</span>
-              <span class="info" data-tip="Models stored under storage/tagger_models.">i</span>
+              <div class="actions" style="margin-top: 12px;">
+                <button class="btn primary" id="settings-save-notify">Save Settings</button>
+                <div class="status-msg" id="settings-msg-notify"></div>
+              </div>
             </div>
-            <p class="muted small">Current default: <span id="tagger-default">unknown</span></p>
-            <div id="tagger-model-list" class="cards"></div>
           </div>
         </div>
       </section>

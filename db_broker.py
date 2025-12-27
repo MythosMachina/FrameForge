@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 import json
 import os
+import smtplib
+import urllib.request
+import hmac
+import hashlib
 import sqlite3
 import threading
 import time
+from email.message import EmailMessage
+from email.utils import formatdate
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -17,6 +23,732 @@ PORT = int(os.environ.get("DB_BROKER_PORT", "8799"))
 
 _LOCK = threading.Lock()
 _CONN: Optional[sqlite3.Connection] = None
+_NOTIFY_STALE_SECS = 45
+_NOTIFY_QUEUE_STABLE_SECS = 45
+
+
+def _as_bool(val: object, default: bool = False) -> bool:
+    if isinstance(val, bool):
+        return val
+    if val is None:
+        return default
+    if isinstance(val, (int, float)):
+        return bool(val)
+    return str(val).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _as_int(val: object, default: int) -> int:
+    try:
+        return int(val)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+
+
+def _load_settings_map(conn: sqlite3.Connection) -> Dict[str, str]:
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT key, value FROM Setting;")
+        rows = cur.fetchall()
+        return {str(row[0]): str(row[1]) for row in rows or [] if row and row[0] is not None}
+    except Exception:
+        return {}
+
+
+def _get_setting(conn: sqlite3.Connection, key: str) -> Optional[str]:
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT value FROM Setting WHERE key=?;", (key,))
+        row = cur.fetchone()
+        return str(row[0]) if row and row[0] is not None else None
+    except Exception:
+        return None
+
+
+def _set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO Setting (key, value, updatedAt) VALUES (?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updatedAt=CURRENT_TIMESTAMP;",
+            (key, value),
+        )
+        conn.commit()
+    except Exception:
+        return
+
+
+def _delete_setting(conn: sqlite3.Connection, key: str) -> None:
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM Setting WHERE key=?;", (key,))
+        conn.commit()
+    except Exception:
+        return
+
+
+def _notifications_enabled(settings: Dict[str, str]) -> bool:
+    return _as_bool(settings.get("notifications_enabled"), False)
+
+
+def _email_channel_enabled(settings: Dict[str, str]) -> bool:
+    return _as_bool(settings.get("notify_channel_email"), False)
+
+def _discord_channel_enabled(settings: Dict[str, str]) -> bool:
+    return _as_bool(settings.get("notify_channel_discord"), False)
+
+def _slack_channel_enabled(settings: Dict[str, str]) -> bool:
+    return _as_bool(settings.get("notify_channel_slack"), False)
+
+def _webhook_channel_enabled(settings: Dict[str, str]) -> bool:
+    return _as_bool(settings.get("notify_channel_webhook"), False)
+
+
+def _email_ready(settings: Dict[str, str]) -> bool:
+    host = settings.get("smtp_host", "").strip()
+    smtp_from = settings.get("smtp_from", "").strip()
+    smtp_to = settings.get("smtp_to", "").strip()
+    port = _as_int(settings.get("smtp_port"), 0)
+    return bool(host and smtp_from and smtp_to and port > 0)
+
+
+def _discord_ready(settings: Dict[str, str]) -> bool:
+    return bool(settings.get("discord_webhook_url", "").strip())
+
+def _slack_ready(settings: Dict[str, str]) -> bool:
+    return bool(settings.get("slack_webhook_url", "").strip())
+
+def _webhook_ready(settings: Dict[str, str]) -> bool:
+    return bool(settings.get("webhook_url", "").strip())
+
+
+def _join_url(base: str, path: str) -> str:
+    if not path:
+        return ""
+    if path.startswith("http://") or path.startswith("https://"):
+        return path
+    if not base:
+        return path
+    if path.startswith("/"):
+        return f"{base.rstrip('/')}{path}"
+    return f"{base.rstrip('/')}/{path}"
+
+
+def _post_json(
+    url: str,
+    payload: Dict[str, object],
+    timeout: int = 5,
+    retries: int = 2,
+    headers: Optional[Dict[str, str]] = None,
+) -> None:
+    data = json.dumps(payload).encode("utf-8")
+    hdrs = {
+        "Content-Type": "application/json",
+        "User-Agent": "FrameForge-Notifier/1.0",
+    }
+    if headers:
+        hdrs.update(headers)
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers=hdrs,
+        method="POST",
+    )
+    last_exc: Optional[Exception] = None
+    for _ in range(retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout):
+                return
+        except Exception as exc:
+            last_exc = exc
+    if last_exc:
+        raise last_exc
+
+
+def _send_discord(settings: Dict[str, str], payload: Dict[str, object]) -> None:
+    url = settings.get("discord_webhook_url", "").strip()
+    if not url:
+        return
+    _post_json(url, payload)
+
+
+def _send_slack(settings: Dict[str, str], payload: Dict[str, object]) -> None:
+    url = settings.get("slack_webhook_url", "").strip()
+    if not url:
+        return
+    _post_json(url, payload)
+
+
+def _sign_webhook(secret: str, body: bytes) -> str:
+    return hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+
+
+def _send_webhook(settings: Dict[str, str], payload: Dict[str, object]) -> None:
+    url = settings.get("webhook_url", "").strip()
+    if not url:
+        return
+    secret = str(settings.get("webhook_secret", "") or "").strip()
+    headers = {}
+    if secret:
+        body = json.dumps(payload).encode("utf-8")
+        headers["X-FrameForge-Signature"] = _sign_webhook(secret, body)
+        headers["X-FrameForge-Signature-Alg"] = "sha256"
+        _post_json(url, payload, headers=headers)
+        return
+    _post_json(url, payload)
+
+
+def _event_enabled(settings: Dict[str, str], event_key: str) -> bool:
+    return _as_bool(settings.get(event_key), False)
+
+
+def _smtp_password(settings: Dict[str, str]) -> str:
+    env_override = os.environ.get("FRAMEFORGE_SMTP_PASS") or os.environ.get("SMTP_PASS")
+    return env_override if env_override is not None else str(settings.get("smtp_pass", ""))
+
+
+def _reserve_notification(
+    conn: sqlite3.Connection,
+    *,
+    run_id: str,
+    notif_type: str,
+    status: str,
+    payload_hash: str,
+) -> bool:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO NotificationLog (runId, type, status, payloadHash)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(runId, type, status, payloadHash) DO NOTHING;
+        """,
+        (run_id, notif_type, status, payload_hash),
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def _release_notification(
+    conn: sqlite3.Connection,
+    *,
+    run_id: str,
+    notif_type: str,
+    status: str,
+    payload_hash: str,
+) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        "DELETE FROM NotificationLog WHERE runId=? AND type=? AND status=? AND payloadHash=?;",
+        (run_id, notif_type, status, payload_hash),
+    )
+    conn.commit()
+
+
+def _send_email(settings: Dict[str, str], subject: str, body: str) -> None:
+    host = settings.get("smtp_host", "").strip()
+    if not host:
+        return
+    port = _as_int(settings.get("smtp_port"), 0)
+    if port <= 0:
+        return
+    smtp_user = settings.get("smtp_user", "").strip()
+    smtp_pass = _smtp_password(settings).strip()
+    smtp_from = settings.get("smtp_from", "").strip()
+    smtp_to = settings.get("smtp_to", "").strip()
+    if not smtp_from or not smtp_to:
+        return
+    use_tls = _as_bool(settings.get("smtp_tls"), False)
+    use_ssl = _as_bool(settings.get("smtp_ssl"), False)
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = smtp_from
+    msg["To"] = smtp_to
+    msg["Date"] = formatdate(localtime=True)
+    msg.set_content(body)
+    timeout = 5
+    if use_ssl:
+        with smtplib.SMTP_SSL(host, port, timeout=timeout) as server:
+            if smtp_user:
+                server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+        return
+    with smtplib.SMTP(host, port, timeout=timeout) as server:
+        server.ehlo()
+        if use_tls:
+            server.starttls()
+            server.ehlo()
+        if smtp_user:
+            server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+
+
+def _is_failed_status(status: str) -> bool:
+    return status == "failed" or status.startswith("failed_")
+
+
+def _format_ts(val: object) -> str:
+    return str(val) if val else "n/a"
+
+
+def _log_notification_error(
+    conn: sqlite3.Connection,
+    run_id: Optional[str],
+    message: str,
+    detail: str,
+) -> None:
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO ErrorLog (
+                runId, component, stage, step, errorType, errorCode, errorMessage, errorDetail, createdAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP);
+            """,
+            (
+                run_id,
+                "notifications",
+                "notify",
+                "notify",
+                "notification_error",
+                "notify_failed",
+                message,
+                detail,
+            ),
+        )
+        conn.commit()
+    except Exception:
+        return
+
+
+def _fetch_run_for_notification(conn: sqlite3.Connection, run_id_db: int) -> Optional[Dict[str, object]]:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT runId, runName, status, lastStep, error, createdAt, startedAt, finishedAt,
+               datasetDownload, loraDownload
+        FROM Run WHERE id=?;
+        """,
+        (run_id_db,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "runId": row[0],
+        "runName": row[1],
+        "status": row[2],
+        "lastStep": row[3],
+        "error": row[4],
+        "createdAt": row[5],
+        "startedAt": row[6],
+        "finishedAt": row[7],
+        "datasetDownload": row[8],
+        "loraDownload": row[9],
+    }
+
+
+def _queue_finish_token(conn: sqlite3.Connection) -> str:
+    cur = conn.cursor()
+    cur.execute("SELECT MAX(finishedAt) FROM Run WHERE finishedAt IS NOT NULL;")
+    row = cur.fetchone()
+    return str(row[0]) if row and row[0] is not None else "empty"
+
+
+def _workers_idle(conn: sqlite3.Connection) -> bool:
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT role, state, heartbeat FROM WorkerStatus WHERE role IN ('initiator', 'orchestrator', 'finisher');"
+    )
+    rows = cur.fetchall() or []
+    roles = {row[0]: {"state": row[1], "heartbeat": row[2]} for row in rows if row and row[0]}
+    for role in ("initiator", "orchestrator", "finisher"):
+        info = roles.get(role)
+        if not info:
+            return False
+        state = str(info.get("state") or "").lower()
+        if state not in {"idle", "ok"}:
+            return False
+        heartbeat = info.get("heartbeat")
+        if heartbeat is None:
+            return False
+        try:
+            age = time.time() - float(heartbeat)
+        except (TypeError, ValueError):
+            return False
+        if age > _NOTIFY_STALE_SECS:
+            return False
+    return True
+
+
+def _active_run_count(conn: sqlite3.Connection) -> int:
+    active_statuses = (
+        "queued",
+        "queued_initiated",
+        "running",
+        "manual_tagging",
+        "ready_to_train",
+        "ready_for_finish",
+    )
+    placeholders = ",".join("?" for _ in active_statuses)
+    cur = conn.cursor()
+    cur.execute(f"SELECT COUNT(*) FROM Run WHERE status IN ({placeholders});", active_statuses)
+    row = cur.fetchone()
+    return int(row[0] or 0) if row else 0
+
+
+def _maybe_notify_queue_finish(conn: sqlite3.Connection, settings: Dict[str, str]) -> None:
+    if not _notifications_enabled(settings):
+        return
+    email_ready = _email_channel_enabled(settings) and _email_ready(settings)
+    discord_ready = _discord_channel_enabled(settings) and _discord_ready(settings)
+    slack_ready = _slack_channel_enabled(settings) and _slack_ready(settings)
+    webhook_ready = _webhook_channel_enabled(settings) and _webhook_ready(settings)
+    if not (email_ready or discord_ready or slack_ready or webhook_ready):
+        return
+    if not _event_enabled(settings, "notify_queue_finish"):
+        return
+    if _active_run_count(conn) > 0:
+        _delete_setting(conn, "queue_finish_candidate_since")
+        return
+    if not _workers_idle(conn):
+        _delete_setting(conn, "queue_finish_candidate_since")
+        return
+    now = time.time()
+    candidate = _get_setting(conn, "queue_finish_candidate_since")
+    if not candidate:
+        _set_setting(conn, "queue_finish_candidate_since", str(int(now)))
+        return
+    try:
+        since = float(candidate)
+    except (TypeError, ValueError):
+        _set_setting(conn, "queue_finish_candidate_since", str(int(now)))
+        return
+    if now - since < _NOTIFY_QUEUE_STABLE_SECS:
+        return
+    payload_hash = _queue_finish_token(conn)
+    run_id = "queue"
+    notif_type = "queue_finish"
+    status = "queue_drain"
+    if not _reserve_notification(conn, run_id=run_id, notif_type=notif_type, status=status, payload_hash=payload_hash):
+        return
+    queue_mode = settings.get("queue_mode") or "running"
+    subject = "FrameForge: Queue is empty"
+    instance_label = settings.get("instance_label", "")
+    instance_url = settings.get("instance_url", "")
+    body_lines = [
+        "Hello,",
+        "",
+        "The queue is fully drained and all workers are idle.",
+        "",
+        "Queue",
+        "- Pending runs: 0",
+        f"- Queue mode: {queue_mode}",
+        "",
+        "Workers",
+        "- Initiator: idle/ok",
+        "- Orchestrator: idle/ok",
+        "- Finisher: idle/ok",
+        "",
+        "Instance",
+        f"- {instance_label}",
+    ]
+    if instance_url:
+        body_lines.append(f"- {instance_url}")
+    body_lines.extend(
+        [
+            "",
+            "Thanks,",
+            "FrameForge",
+        ]
+    )
+    body = "\n".join(body_lines)
+    success = False
+    if email_ready:
+        try:
+            _send_email(settings, subject, body)
+            success = True
+        except Exception as exc:
+            _log_notification_error(conn, None, "queue finish email failed", str(exc))
+    if discord_ready:
+        try:
+            fields = [
+                {"name": "Queue mode", "value": queue_mode, "inline": True},
+            ]
+            if instance_label:
+                fields.append({"name": "Instance", "value": instance_label, "inline": True})
+            if instance_url:
+                fields.append({"name": "Open", "value": instance_url, "inline": False})
+            embed = {
+                "title": "FrameForge • Queue drained",
+                "description": "All workers are idle and no runs are active.",
+                "color": 0x2DB4FF,
+                "fields": fields,
+            }
+            _send_discord(settings, {"embeds": [embed]})
+            success = True
+        except Exception as exc:
+            _log_notification_error(conn, None, "queue finish discord failed", str(exc))
+    if slack_ready:
+        try:
+            text = "\n".join(
+                [
+                    "FrameForge: Queue drained",
+                    "All workers are idle and no runs are active.",
+                    f"Queue mode: {queue_mode}",
+                    f"Instance: {instance_label}" if instance_label else "",
+                    instance_url or "",
+                ]
+            ).strip()
+            fields = [
+                {"type": "mrkdwn", "text": f"*Queue mode:* {queue_mode}"},
+            ]
+            if instance_label:
+                fields.append({"type": "mrkdwn", "text": f"*Instance:* {instance_label}"})
+            blocks = [
+                {"type": "header", "text": {"type": "plain_text", "text": "FrameForge • Queue drained"}},
+                {"type": "section", "text": {"type": "mrkdwn", "text": "All workers are idle and no runs are active."}},
+                {"type": "section", "fields": fields},
+            ]
+            if instance_url:
+                blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*Open:* {instance_url}"}})
+            payload = {
+                "attachments": [
+                    {
+                        "color": "#2DB4FF",
+                        "fallback": "FrameForge • Queue drained",
+                        "blocks": blocks,
+                    }
+                ],
+            }
+            _send_slack(settings, payload)
+            success = True
+        except Exception as exc:
+            _log_notification_error(conn, None, "queue finish slack failed", str(exc))
+    if webhook_ready:
+        try:
+            payload = {
+                "type": "queue_finish",
+                "queue_count": 0,
+                "queue_mode": queue_mode,
+                "instance_label": instance_label,
+                "instance_url": instance_url,
+            }
+            _send_webhook(settings, payload)
+            success = True
+        except Exception as exc:
+            _log_notification_error(conn, None, "queue finish webhook failed", str(exc))
+    if success:
+        _delete_setting(conn, "queue_finish_candidate_since")
+    else:
+        _release_notification(conn, run_id=run_id, notif_type=notif_type, status=status, payload_hash=payload_hash)
+
+
+def _maybe_notify_run_status(conn: sqlite3.Connection, run_id_db: int, status: str) -> None:
+    settings = _load_settings_map(conn)
+    if not _notifications_enabled(settings):
+        return
+    email_ready = _email_channel_enabled(settings) and _email_ready(settings)
+    discord_ready = _discord_channel_enabled(settings) and _discord_ready(settings)
+    slack_ready = _slack_channel_enabled(settings) and _slack_ready(settings)
+    webhook_ready = _webhook_channel_enabled(settings) and _webhook_ready(settings)
+    if not (email_ready or discord_ready or slack_ready or webhook_ready):
+        return
+    notif_type = None
+    event_key = None
+    if status == "done":
+        notif_type = "job_finish"
+        event_key = "notify_job_finish"
+    elif _is_failed_status(status):
+        notif_type = "job_failed"
+        event_key = "notify_job_failed"
+    if not notif_type or not event_key or not _event_enabled(settings, event_key):
+        return
+    run = _fetch_run_for_notification(conn, run_id_db)
+    if not run:
+        return
+    run_id = str(run.get("runId") or run_id_db)
+    payload_hash = f"{notif_type}:{run_id}:{status}"
+    if not _reserve_notification(conn, run_id=run_id, notif_type=notif_type, status=status, payload_hash=payload_hash):
+        return
+    subject = f"FrameForge: Run {run_id} {'finished' if notif_type == 'job_finish' else 'failed'}"
+    instance_label = settings.get("instance_label", "")
+    instance_url = settings.get("instance_url", "")
+    body_lines = [
+        "Hello,",
+        "",
+        "Your FrameForge run has completed successfully."
+        if notif_type == "job_finish"
+        else "Your FrameForge run needs attention. It did not complete successfully.",
+        "",
+        "Run",
+        f"- ID: {run_id}",
+        f"- Name: {run.get('runName') or ''}",
+        f"- Status: {run.get('status') or status}",
+        f"- Last step: {run.get('lastStep') or ''}",
+        f"- Created: {_format_ts(run.get('createdAt'))}",
+        f"- Started: {_format_ts(run.get('startedAt'))}",
+        f"- Finished: {_format_ts(run.get('finishedAt'))}",
+    ]
+    if notif_type == "job_finish":
+        body_lines.extend(
+            [
+                "",
+                "Downloads",
+                f"- Dataset: {run.get('datasetDownload') or ''}",
+                f"- LoRA: {run.get('loraDownload') or ''}",
+            ]
+        )
+    else:
+        body_lines.extend(
+            [
+                "",
+                "Error",
+                f"- {run.get('error') or ''}",
+            ]
+        )
+    body_lines.extend(
+        [
+            "",
+            "Instance",
+            f"- {instance_label}",
+        ]
+    )
+    if instance_url:
+        body_lines.append(f"- {instance_url}")
+    body_lines.extend(
+        [
+            "",
+            "Thanks,",
+            "FrameForge",
+        ]
+    )
+    body = "\n".join(body_lines)
+    success = False
+    if email_ready:
+        try:
+            _send_email(settings, subject, body)
+            success = True
+        except Exception as exc:
+            _log_notification_error(conn, run_id, "run email failed", str(exc))
+    if discord_ready:
+        try:
+            base_url = str(settings.get("instance_url", "") or "").strip()
+            dataset_url = _join_url(base_url, str(run.get("datasetDownload") or ""))
+            lora_url = _join_url(base_url, str(run.get("loraDownload") or ""))
+            header = "Run finished" if notif_type == "job_finish" else "Run failed"
+            status_label = str(run.get("status") or status)
+            color = 0x4FE18A if notif_type == "job_finish" else 0xFF6B57
+            fields = [
+                {"name": "Run", "value": run_id, "inline": True},
+                {"name": "Status", "value": status_label, "inline": True},
+                {"name": "Name", "value": str(run.get("runName") or ""), "inline": False},
+            ]
+            if notif_type == "job_finish":
+                if dataset_url:
+                    fields.append({"name": "Dataset", "value": dataset_url, "inline": False})
+                if lora_url:
+                    fields.append({"name": "LoRA", "value": lora_url, "inline": False})
+            else:
+                fields.append({"name": "Error", "value": str(run.get("error") or ""), "inline": False})
+            if instance_label:
+                fields.append({"name": "Instance", "value": instance_label, "inline": True})
+            if instance_url:
+                fields.append({"name": "Open", "value": instance_url, "inline": False})
+            embed = {
+                "title": f"FrameForge • {header}",
+                "color": color,
+                "fields": fields,
+            }
+            _send_discord(settings, {"embeds": [embed]})
+            success = True
+        except Exception as exc:
+            _log_notification_error(conn, run_id, "run discord failed", str(exc))
+    if slack_ready:
+        try:
+            base_url = str(settings.get("instance_url", "") or "").strip()
+            dataset_url = _join_url(base_url, str(run.get("datasetDownload") or ""))
+            lora_url = _join_url(base_url, str(run.get("loraDownload") or ""))
+            status_label = str(run.get("status") or status)
+            header = f"Run {'finished' if notif_type == 'job_finish' else 'failed'}"
+            text_lines = [
+                f"FrameForge: {header}",
+                f"Run: {run_id}",
+                f"Name: {run.get('runName') or ''}",
+                f"Status: {status_label}",
+            ]
+            if notif_type == "job_finish":
+                if dataset_url:
+                    text_lines.append(f"Dataset: {dataset_url}")
+                if lora_url:
+                    text_lines.append(f"LoRA: {lora_url}")
+            else:
+                text_lines.append(f"Error: {run.get('error') or ''}")
+            if instance_label:
+                text_lines.append(f"Instance: {instance_label}")
+            if instance_url:
+                text_lines.append(instance_url)
+            fields = [
+                {"type": "mrkdwn", "text": f"*Run:* {run_id}"},
+                {"type": "mrkdwn", "text": f"*Status:* {status_label}"},
+                {"type": "mrkdwn", "text": f"*Name:* {run.get('runName') or ''}"},
+            ]
+            blocks = [
+                {"type": "header", "text": {"type": "plain_text", "text": f"FrameForge • {header}"}},
+                {"type": "section", "fields": fields},
+            ]
+            if notif_type == "job_finish":
+                if dataset_url:
+                    blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*Dataset:* {dataset_url}"}})
+                if lora_url:
+                    blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*LoRA:* {lora_url}"}})
+            else:
+                blocks.append(
+                    {"type": "section", "text": {"type": "mrkdwn", "text": f"*Error:* {run.get('error') or ''}"}}
+                )
+            if instance_label:
+                blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": f"{instance_label}"}]})
+            if instance_url:
+                blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*Open:* {instance_url}"}})
+            payload = {
+                "attachments": [
+                    {
+                        "color": "#4FE18A" if notif_type == "job_finish" else "#FF6B57",
+                        "fallback": f"FrameForge • {header}",
+                        "blocks": blocks,
+                    }
+                ],
+            }
+            _send_slack(settings, payload)
+            success = True
+        except Exception as exc:
+            _log_notification_error(conn, run_id, "run slack failed", str(exc))
+    if webhook_ready:
+        try:
+            base_url = str(settings.get("instance_url", "") or "").strip()
+            dataset_url = _join_url(base_url, str(run.get("datasetDownload") or ""))
+            lora_url = _join_url(base_url, str(run.get("loraDownload") or ""))
+            payload = {
+                "type": notif_type,
+                "run_id": run_id,
+                "run_name": run.get("runName") or "",
+                "status": run.get("status") or status,
+                "last_step": run.get("lastStep") or "",
+                "error": run.get("error") or "",
+                "created_at": _format_ts(run.get("createdAt")),
+                "started_at": _format_ts(run.get("startedAt")),
+                "finished_at": _format_ts(run.get("finishedAt")),
+                "dataset_url": dataset_url,
+                "lora_url": lora_url,
+                "instance_label": instance_label,
+                "instance_url": instance_url,
+            }
+            _send_webhook(settings, payload)
+            success = True
+        except Exception as exc:
+            _log_notification_error(conn, run_id, "run webhook failed", str(exc))
+    if success:
+        _maybe_notify_queue_finish(conn, settings)
+    else:
+        _release_notification(conn, run_id=run_id, notif_type=notif_type, status=status, payload_hash=payload_hash)
 
 
 def _pid_alive(pid: int) -> bool:
@@ -119,6 +851,19 @@ def _ensure_tables(conn: sqlite3.Connection) -> None:
             logTail TEXT,
             logMissing BOOLEAN DEFAULT 0,
             createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS NotificationLog (
+            id INTEGER PRIMARY KEY,
+            runId TEXT NOT NULL,
+            type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            payloadHash TEXT NOT NULL,
+            sentAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(runId, type, status, payloadHash)
         );
         """
     )
@@ -302,6 +1047,7 @@ def _op_mark_run_status(args: Dict[str, Any]) -> None:
     error = args.get("error")
     started = bool(args.get("started"))
     finished = bool(args.get("finished"))
+    prev_status = None
     fields = ["status=?", "lastStep=?"]
     params = [status, last_step]
     if error is not None:
@@ -314,6 +1060,13 @@ def _op_mark_run_status(args: Dict[str, Any]) -> None:
     params.append(run_id_db)
     sql = f"UPDATE Run SET {', '.join(fields)} WHERE id=?;"
     cur = _conn().cursor()
+    if run_id_db:
+        try:
+            cur.execute("SELECT status FROM Run WHERE id=?;", (run_id_db,))
+            row = cur.fetchone()
+            prev_status = row[0] if row else None
+        except Exception:
+            prev_status = None
     cur.execute(sql, params)
     if status != "queued":
         cur.execute("SELECT position FROM QueueItem WHERE runId=(SELECT runId FROM Run WHERE id=?)", (run_id_db,))
@@ -336,6 +1089,8 @@ def _op_mark_run_status(args: Dict[str, Any]) -> None:
                     (run_id, int(max_pos) + 1),
                 )
     _conn().commit()
+    if run_id_db and status and status != prev_status:
+        _maybe_notify_run_status(_conn(), int(run_id_db), str(status))
 
 
 def _op_update_run_step(args: Dict[str, Any]) -> None:
