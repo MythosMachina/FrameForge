@@ -76,6 +76,7 @@ cat > "${SYSTEMD_DIR}/frameforge-db-broker.service" <<SERVICE
 [Unit]
 Description=FrameForge DB Broker
 After=network.target
+Wants=frameforge-initiator.service frameforge-orchestrator.service frameforge-finisher.service
 
 [Service]
 Type=simple
@@ -101,8 +102,7 @@ cat > "${SYSTEMD_DIR}/frameforge-webapp.service" <<SERVICE
 [Unit]
 Description=FrameForge WebApp
 After=network.target frameforge-db-broker.service
-Requires=frameforge-db-broker.service
-BindsTo=frameforge-db-broker.service
+Wants=frameforge-db-broker.service
 
 [Service]
 Type=simple
@@ -142,8 +142,9 @@ Environment=VIRTUAL_ENV=${VENV_DIR}
 Environment=PATH=${PATH_ENV}
 ExecStartPre=/usr/bin/mkdir -p ${LOG_DIR}
 ExecStart=${VENV_DIR}/bin/python3 ${ROOT_DIR}/initiator.py
-Restart=always
+Restart=on-failure
 RestartSec=5
+RestartPreventExitStatus=SIGTERM
 StandardOutput=append:${LOG_DIR}/initiator.service.log
 StandardError=append:${LOG_DIR}/initiator.service.log
 
@@ -169,8 +170,9 @@ Environment=VIRTUAL_ENV=${VENV_DIR}
 Environment=PATH=${PATH_ENV}
 ExecStartPre=/usr/bin/mkdir -p ${LOG_DIR}
 ExecStart=${VENV_DIR}/bin/python3 ${ROOT_DIR}/orchestrator_worker.py
-Restart=always
+Restart=on-failure
 RestartSec=5
+RestartPreventExitStatus=SIGTERM
 StandardOutput=append:${LOG_DIR}/orchestrator.service.log
 StandardError=append:${LOG_DIR}/orchestrator.service.log
 
@@ -196,8 +198,9 @@ Environment=VIRTUAL_ENV=${VENV_DIR}
 Environment=PATH=${PATH_ENV}
 ExecStartPre=/usr/bin/mkdir -p ${LOG_DIR}
 ExecStart=${VENV_DIR}/bin/python3 ${ROOT_DIR}/finisher.py
-Restart=always
+Restart=on-failure
 RestartSec=5
+RestartPreventExitStatus=SIGTERM
 StandardOutput=append:${LOG_DIR}/finisher.service.log
 StandardError=append:${LOG_DIR}/finisher.service.log
 
