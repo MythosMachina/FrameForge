@@ -105,6 +105,28 @@ const DEFAULT_SETTINGS = {
   trainer_use_prodigy: false,
   trainer_max_grad_norm: 0,
   queue_mode: "running",
+  notifications_enabled: false,
+  notify_channel_email: false,
+  notify_channel_slack: false,
+  notify_channel_discord: false,
+  notify_channel_webhook: false,
+  notify_job_finish: false,
+  notify_job_failed: false,
+  notify_queue_finish: false,
+  smtp_host: "",
+  smtp_port: 587,
+  smtp_user: "",
+  smtp_pass: "",
+  smtp_tls: true,
+  smtp_ssl: false,
+  smtp_from: "",
+  smtp_to: "",
+  instance_label: "FrameForge Dev",
+  instance_url: "",
+  slack_webhook_url: "",
+  discord_webhook_url: "",
+  webhook_url: "",
+  webhook_secret: "",
 };
 
 function readLogTail(filePath, maxLines = 160) {
@@ -997,10 +1019,13 @@ app.post('/api/run/:id/stop', async (req, res) => {
     // Clean dirs and trainer outputs
     await cleanupWorkingDirs(run);
     await removeRunArtifacts(run);
-    await dbExec(
-      "UPDATE Run SET status='failed', finishedAt=CURRENT_TIMESTAMP, error='stopped by user', lastStep='failed' WHERE id=?",
-      [id]
-    );
+    await brokerExec("mark_run_status", {
+      run_id_db: run.id,
+      status: "failed",
+      last_step: "failed",
+      error: "stopped by user",
+      finished: true,
+    });
     res.json({ ok: true });
   } catch (err) {
     console.error('[run:stop] failed', err);
@@ -1272,7 +1297,7 @@ app.put('/api/settings', async (req, res) => {
         updates[key] = norm;
         continue;
       }
-      if (typeof val !== 'number' && typeof val !== 'string') continue;
+      if (typeof val !== 'number' && typeof val !== 'string' && typeof val !== 'boolean') continue;
       updates[key] = val;
     }
     const entries = Object.entries(updates);
@@ -1863,8 +1888,18 @@ async function getSettingsMap() {
   const rows = await dbQuery("SELECT key, value FROM Setting", []);
   const map = { ...DEFAULT_SETTINGS };
   for (const row of rows) {
-    const num = Number(row.value);
-    map[row.key] = Number.isFinite(num) ? num : row.value;
+    const raw = row.value;
+    const fallback = map[row.key];
+    if (raw === "") {
+      map[row.key] = raw;
+      continue;
+    }
+    if (typeof fallback === "number") {
+      const num = Number(raw);
+      map[row.key] = Number.isFinite(num) ? num : fallback;
+      continue;
+    }
+    map[row.key] = raw;
   }
   return map;
 }
