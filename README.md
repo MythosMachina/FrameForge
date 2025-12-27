@@ -1,19 +1,20 @@
 # FrameFamily
 
-A modular ecosystem for training, viewing, and generating AI frames.
+A modular AI ecosystem focused on frame-based image generation, training, and visualization.
 
 ## Components
 
 - **Training**  
   [FrameForge](https://github.com/MythosMachina/FrameForge)  
-  Dataset preparation, training orchestration, and automation.
+  AI training, dataset preparation, and orchestration within the Frame ecosystem.
 
 - **Viewing**  
   [FrameView](https://github.com/MythosMachina/FrameView)  
-  Visualization and inspection of generated frames and results.
+  Visualization, inspection, and analysis of generated frames and training results.
 
 - **Generating**  
-  **FrameCreate**  
+  [FrameCreate](https://github.com/MythosMachina/FrameCreate)  
+  Generative image AI of the Frame ecosystem.  
   _Work in Progress_
 
 # FrameForge
