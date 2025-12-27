@@ -243,7 +243,7 @@ def _release_notification(
     conn.commit()
 
 
-def _send_email(settings: Dict[str, str], subject: str, body: str) -> None:
+def _send_email(settings: Dict[str, str], subject: str, body: str, html: Optional[str] = None) -> None:
     host = settings.get("smtp_host", "").strip()
     if not host:
         return
@@ -264,6 +264,8 @@ def _send_email(settings: Dict[str, str], subject: str, body: str) -> None:
     msg["To"] = smtp_to
     msg["Date"] = formatdate(localtime=True)
     msg.set_content(body)
+    if html:
+        msg.add_alternative(html, subtype="html")
     timeout = 5
     if use_ssl:
         with smtplib.SMTP_SSL(host, port, timeout=timeout) as server:
@@ -288,6 +290,155 @@ def _is_failed_status(status: str) -> bool:
 def _format_ts(val: object) -> str:
     return str(val) if val else "n/a"
 
+
+def _html_escape(text: str) -> str:
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+    )
+
+
+def _render_run_email_html(
+    *,
+    header: str,
+    run_id: str,
+    run_name: str,
+    status: str,
+    last_step: str,
+    created_at: str,
+    started_at: str,
+    finished_at: str,
+    dataset_url: str,
+    lora_url: str,
+    error: str,
+    instance_label: str,
+    instance_url: str,
+) -> str:
+    def _row(label: str, value: str) -> str:
+        return (
+            f"<tr><td style='padding:6px 10px;color:#8fa2b8;'>{_html_escape(label)}</td>"
+            f"<td style='padding:6px 10px;color:#f5f7fb;'>{_html_escape(value)}</td></tr>"
+        )
+
+    downloads = ""
+    if dataset_url or lora_url:
+        rows = ""
+        if dataset_url:
+            rows += _row("Dataset", dataset_url)
+        if lora_url:
+            rows += _row("LoRA", lora_url)
+        downloads = f"""
+        <div style="margin-top:16px;padding:12px;border-radius:10px;background:#0f1622;border:1px solid #1c2a3a;">
+          <div style="font-weight:700;color:#8fd3ff;margin-bottom:6px;">Downloads</div>
+          <table style="width:100%;border-collapse:collapse;">{rows}</table>
+        </div>
+        """
+    error_block = ""
+    if error:
+        error_block = f"""
+        <div style="margin-top:16px;padding:12px;border-radius:10px;background:#221416;border:1px solid #3a1c20;color:#ffb3a8;">
+          <div style="font-weight:700;margin-bottom:6px;">Error</div>
+          <div style="white-space:pre-wrap;">{_html_escape(error)}</div>
+        </div>
+        """
+    instance_line = (
+        f"<a href='{_html_escape(instance_url)}' style='color:#8fd3ff;text-decoration:none;'>"
+        f"{_html_escape(instance_url)}</a>"
+        if instance_url
+        else ""
+    )
+
+    return f"""
+<html>
+  <body style="margin:0;padding:0;background:#0b0f14;font-family:Arial,sans-serif;color:#f5f7fb;">
+    <div style="max-width:640px;margin:0 auto;padding:24px;">
+      <div style="padding:18px 20px;border-radius:16px;background:linear-gradient(180deg,#141a22,#0f141b);border:1px solid #1d2a38;">
+        <table role="presentation" style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="width:28px;vertical-align:middle;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 100 100" role="img" aria-label="FrameForge">
+                <path fill="#d58c3f" d="M64.6 12.8l5.4 9.3c3.1-0.3 6.3-0.3 9.4 0l5.4-9.3 11.3 6.5-5.4 9.3c2.2 2.2 4.1 4.6 5.7 7.3l10.7-2.1 3.3 12.7-10.7 2.1c0.3 3.1 0.3 6.3 0 9.4l10.7 2.1-3.3 12.7-10.7-2.1c-1.6 2.7-3.5 5.1-5.7 7.3l5.4 9.3-11.3 6.5-5.4-9.3c-3.1 0.3-6.3 0.3-9.4 0l-5.4 9.3-11.3-6.5 5.4-9.3c-2.2-2.2-4.1-4.6-5.7-7.3l-10.7 2.1-3.3-12.7 10.7-2.1c-0.3-3.1-0.3-6.3 0-9.4l-10.7-2.1 3.3-12.7 10.7 2.1c1.6-2.7 3.5-5.1 5.7-7.3l-5.4-9.3 11.3-6.5 5.4 9.3c3.1-0.3 6.3-0.3 9.4 0l5.4-9.3 11.3 6.5zM50 35c-8.3 0-15 6.7-15 15s6.7 15 15 15 15-6.7 15-15-6.7-15-15-15z"/>
+              </svg>
+            </td>
+            <td style="padding-left:10px;vertical-align:middle;">
+              <div style="font-size:18px;font-weight:700;letter-spacing:0.4px;">FrameForge</div>
+              <div style="margin-top:2px;font-size:11px;letter-spacing:1px;color:#8fa2b8;text-transform:uppercase;">automate. refine. deliver.</div>
+            </td>
+          </tr>
+        </table>
+        <div style="margin-top:10px;font-size:15px;color:#8fd3ff;">{_html_escape(header)}</div>
+      </div>
+      <div style="margin-top:16px;padding:18px;border-radius:16px;background:#111720;border:1px solid #1c2a3a;">
+        <table style="width:100%;border-collapse:collapse;">
+          {_row("Run", run_id)}
+          {_row("Name", run_name)}
+          {_row("Status", status)}
+          {_row("Last step", last_step)}
+          {_row("Created", created_at)}
+          {_row("Started", started_at)}
+          {_row("Finished", finished_at)}
+        </table>
+        {downloads}
+        {error_block}
+      </div>
+      <div style="margin-top:16px;color:#8fa2b8;font-size:12px;">
+        <div>{_html_escape(instance_label)}</div>
+        <div>{instance_line}</div>
+      </div>
+    </div>
+  </body>
+</html>
+"""
+
+def _render_queue_email_html(
+    *,
+    queue_mode: str,
+    instance_label: str,
+    instance_url: str,
+) -> str:
+    instance_line = (
+        f"<a href='{_html_escape(instance_url)}' style='color:#8fd3ff;text-decoration:none;'>"
+        f"{_html_escape(instance_url)}</a>"
+        if instance_url
+        else ""
+    )
+    return f"""
+<html>
+  <body style="margin:0;padding:0;background:#0b0f14;font-family:Arial,sans-serif;color:#f5f7fb;">
+    <div style="max-width:640px;margin:0 auto;padding:24px;">
+      <div style="padding:18px 20px;border-radius:16px;background:linear-gradient(180deg,#141a22,#0f141b);border:1px solid #1d2a38;">
+        <table role="presentation" style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="width:28px;vertical-align:middle;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 100 100" role="img" aria-label="FrameForge">
+                <path fill="#d58c3f" d="M64.6 12.8l5.4 9.3c3.1-0.3 6.3-0.3 9.4 0l5.4-9.3 11.3 6.5-5.4 9.3c2.2 2.2 4.1 4.6 5.7 7.3l10.7-2.1 3.3 12.7-10.7 2.1c0.3 3.1 0.3 6.3 0 9.4l10.7 2.1-3.3 12.7-10.7-2.1c-1.6 2.7-3.5 5.1-5.7 7.3l5.4 9.3-11.3 6.5-5.4-9.3c-3.1 0.3-6.3 0.3-9.4 0l-5.4 9.3-11.3-6.5 5.4-9.3c-2.2-2.2-4.1-4.6-5.7-7.3l-10.7 2.1-3.3-12.7 10.7-2.1c-0.3-3.1-0.3-6.3 0-9.4l-10.7-2.1 3.3-12.7 10.7 2.1c1.6-2.7 3.5-5.1 5.7-7.3l-5.4-9.3 11.3-6.5 5.4 9.3c3.1-0.3 6.3-0.3 9.4 0l5.4-9.3 11.3 6.5zM50 35c-8.3 0-15 6.7-15 15s6.7 15 15 15 15-6.7 15-15-6.7-15-15-15z"/>
+              </svg>
+            </td>
+            <td style="padding-left:10px;vertical-align:middle;">
+              <div style="font-size:18px;font-weight:700;letter-spacing:0.4px;">FrameForge</div>
+              <div style="margin-top:2px;font-size:11px;letter-spacing:1px;color:#8fa2b8;text-transform:uppercase;">automate. refine. deliver.</div>
+            </td>
+          </tr>
+        </table>
+        <div style="margin-top:10px;font-size:15px;color:#8fd3ff;">Queue drained</div>
+      </div>
+      <div style="margin-top:16px;padding:18px;border-radius:16px;background:#111720;border:1px solid #1c2a3a;">
+        <div style="margin-bottom:10px;color:#c8d2df;">All workers are idle and no runs are active.</div>
+        <table style="width:100%;border-collapse:collapse;">
+          <tr><td style="padding:6px 10px;color:#8fa2b8;">Queue mode</td><td style="padding:6px 10px;color:#f5f7fb;">{_html_escape(queue_mode)}</td></tr>
+        </table>
+      </div>
+      <div style="margin-top:16px;color:#8fa2b8;font-size:12px;">
+        <div>{_html_escape(instance_label)}</div>
+        <div>{instance_line}</div>
+      </div>
+    </div>
+  </body>
+</html>
+"""
 
 def _log_notification_error(
     conn: sqlite3.Connection,
@@ -464,7 +615,12 @@ def _maybe_notify_queue_finish(conn: sqlite3.Connection, settings: Dict[str, str
     success = False
     if email_ready:
         try:
-            _send_email(settings, subject, body)
+            html = _render_queue_email_html(
+                queue_mode=queue_mode,
+                instance_label=instance_label,
+                instance_url=instance_url,
+            )
+            _send_email(settings, subject, body, html)
             success = True
         except Exception as exc:
             _log_notification_error(conn, None, "queue finish email failed", str(exc))
@@ -625,7 +781,22 @@ def _maybe_notify_run_status(conn: sqlite3.Connection, run_id_db: int, status: s
     success = False
     if email_ready:
         try:
-            _send_email(settings, subject, body)
+            html = _render_run_email_html(
+                header="Run finished" if notif_type == "job_finish" else "Run failed",
+                run_id=run_id,
+                run_name=str(run.get("runName") or ""),
+                status=str(run.get("status") or status),
+                last_step=str(run.get("lastStep") or ""),
+                created_at=_format_ts(run.get("createdAt")),
+                started_at=_format_ts(run.get("startedAt")),
+                finished_at=_format_ts(run.get("finishedAt")),
+                dataset_url=str(run.get("datasetDownload") or ""),
+                lora_url=str(run.get("loraDownload") or ""),
+                error=str(run.get("error") or ""),
+                instance_label=instance_label,
+                instance_url=instance_url,
+            )
+            _send_email(settings, subject, body, html)
             success = True
         except Exception as exc:
             _log_notification_error(conn, run_id, "run email failed", str(exc))
