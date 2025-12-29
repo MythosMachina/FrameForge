@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wireTrainProfileEditor();
   wireSettings();
   wireManualEditor();
+  wireSystemStatusActions();
   refreshSystemStatus();
   loadData();
   populateAutocharSelect();
@@ -193,6 +194,11 @@ async function refreshSystemStatus() {
             </div>
             <h4>${s.name}</h4>
             <p class="muted small">${s.message || ""}</p>
+            <div class="actions">
+              <button class="btn ghost" data-action="restart-service" data-service="${s.key || ""}">
+                Restart
+              </button>
+            </div>
           </div>
         `
         )
@@ -201,6 +207,35 @@ async function refreshSystemStatus() {
   } catch (err) {
     console.error("Failed to load system status", err);
   }
+}
+
+function wireSystemStatusActions() {
+  document.addEventListener("click", async (event) => {
+    const btn = event.target?.closest?.("[data-action='restart-service']");
+    if (!btn) return;
+    const service = btn.getAttribute("data-service");
+    if (!service) return;
+    const label = btn.closest(".status-card")?.querySelector("h4")?.textContent || service;
+    if (!confirm(`Restart ${label}?`)) return;
+    btn.disabled = true;
+    try {
+      const res = await fetch("/api/system/restart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ service }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload?.error || "restart failed");
+      }
+      setTimeout(refreshSystemStatus, 1500);
+    } catch (err) {
+      console.error("Restart failed", err);
+      alert(`Restart failed: ${err.message || err}`);
+    } finally {
+      btn.disabled = false;
+    }
+  });
 }
 
 function formatStepLabel(step) {
@@ -264,6 +299,7 @@ function wireUploadForm() {
   const autotagToggle = form?.querySelector('input[name="autotag"]');
   const autocharToggle = form?.querySelector('input[name="autochar"]');
   const tagverifyToggle = form?.querySelector('input[name="tagverify"]');
+  const autocharPresetsWrap = document.getElementById("autochar-presets-wrap");
   const uploadMsg = document.getElementById("upload-msg");
   const stagedList = document.getElementById("staged-list");
   const launchButton = form?.querySelector('button[type="submit"]');
@@ -288,9 +324,18 @@ function wireUploadForm() {
       if (tagverifyToggle) tagverifyToggle.checked = false;
     }
   };
+  const syncAutocharPresets = () => {
+    if (!autocharPresetsWrap) return;
+    const enabled = autocharToggle?.checked ?? false;
+    autocharPresetsWrap.style.display = enabled ? "" : "none";
+  };
   if (manualToggle) {
     manualToggle.addEventListener("change", syncManualToggle);
     syncManualToggle();
+  }
+  if (autocharToggle) {
+    autocharToggle.addEventListener("change", syncAutocharPresets);
+    syncAutocharPresets();
   }
 
   const setUploadMsg = (text, cls = "") => {
@@ -453,6 +498,13 @@ function wireUploadForm() {
     const selectedPresets = autocharPresetsSelect
       ? Array.from(autocharPresetsSelect.selectedOptions).map((o) => o.value)
       : [];
+    const samplePrompts = [
+      form.querySelector('input[name="samplePrompt1"]')?.value ?? "",
+      form.querySelector('input[name="samplePrompt2"]')?.value ?? "",
+      form.querySelector('input[name="samplePrompt3"]')?.value ?? "",
+    ]
+      .map((value) => value.trim())
+      .filter(Boolean);
     const body = {
       uploads: ready.map((u) => u.id),
       autotag: form.querySelector('input[name="autotag"]')?.checked ?? true,
@@ -467,6 +519,9 @@ function wireUploadForm() {
       note: form.querySelector('input[name="note"]')?.value ?? "",
       autocharPresets: selectedPresets,
     };
+    if (samplePrompts.length) {
+      body.samplePrompts = samplePrompts;
+    }
     setUploadMsg("Queuing staged uploads...");
     try {
       const res = await fetch("/api/upload/commit", {
