@@ -204,6 +204,18 @@ function normalizeTrainProfileName(val) {
   return String(val || '').toLowerCase().trim();
 }
 
+function normalizeSamplePrompts(raw) {
+  let list = [];
+  if (Array.isArray(raw)) {
+    list = raw;
+  } else if (raw !== undefined && raw !== null) {
+    list = [raw];
+  }
+  return list
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+}
+
 function normalizeSystemdState(raw) {
   const s = String(raw || '').trim().toLowerCase();
   if (s === 'active' || s === 'activating' || s === 'reloading') return 'active';
@@ -764,26 +776,31 @@ app.get('/api/system/status', async (_req, res) => {
     if (!brokerHealth.ok) {
       const services = [
         {
+          key: "webapp",
           name: "WebApp",
           state: webappState === 'active' ? "Fail" : "Fail",
           message: webappState === 'active' ? "broker offline" : `service ${webappState}`,
         },
         {
+          key: "broker",
           name: "DB Broker",
           state: "Fail",
           message: brokerHealth.message,
         },
         {
+          key: "initiator",
           name: "Initiator",
           state: "Fail",
           message: "broker offline",
         },
         {
+          key: "orchestrator",
           name: "Orchestrator",
           state: "Fail",
           message: "broker offline",
         },
         {
+          key: "finisher",
           name: "Finisher",
           state: "Fail",
           message: "broker offline",
@@ -817,22 +834,26 @@ app.get('/api/system/status', async (_req, res) => {
     const finisher = resolveState(finisherState, finisherWork, false);
     const services = [
       {
+        key: "webapp",
         name: "WebApp",
         state: webappState === 'active' ? "OK" : "Fail",
         message: webappState === 'active' ? (mode === "paused" ? "Queue paused" : "running") : `service ${webappState}`,
       },
-      { name: "DB Broker", state: "OK", message: "healthy" },
+      { key: "broker", name: "DB Broker", state: "OK", message: "healthy" },
       {
+        key: "initiator",
         name: "Initiator",
         state: initiator.state,
         message: initiator.message,
       },
       {
+        key: "orchestrator",
         name: "Orchestrator",
         state: orchestrator.state,
         message: orchestrator.message,
       },
       {
+        key: "finisher",
         name: "Finisher",
         state: finisher.state,
         message: finisher.message,
@@ -842,6 +863,33 @@ app.get('/api/system/status', async (_req, res) => {
   } catch (err) {
     console.error('[system:status] failed', err);
     res.status(500).json({ error: 'failed to load system status' });
+  }
+});
+
+app.post('/api/system/restart', async (req, res) => {
+  try {
+    const key = String(req.body?.service || "").trim().toLowerCase();
+    const unit = SYSTEMD_SERVICES[key];
+    if (!unit) {
+      return res.status(400).json({ error: "invalid service" });
+    }
+    const restart = () => {
+      const child = spawn('systemctl', ['restart', unit], {
+        stdio: 'ignore',
+        detached: true,
+      });
+      child.unref();
+    };
+    if (key === "webapp") {
+      res.json({ ok: true, service: key });
+      setTimeout(restart, 750);
+      return;
+    }
+    restart();
+    res.json({ ok: true, service: key });
+  } catch (err) {
+    console.error('[system:restart] failed', err);
+    res.status(500).json({ error: 'failed to restart service' });
   }
 });
 
@@ -1605,7 +1653,21 @@ app.get('/api/upload/staged', async (_req, res) => {
 
 app.post('/api/upload/commit', async (req, res) => {
   try {
-    const { uploads = [], autotag = true, autochar = true, facecap = false, train = false, gpu = true, imagesOnly = false, tagverify = false, manualTagging = false, note = '', autocharPresets = [], trainProfile: trainProfileRaw = '' } = req.body || {};
+    const {
+      uploads = [],
+      autotag = true,
+      autochar = true,
+      facecap = false,
+      train = false,
+      gpu = true,
+      imagesOnly = false,
+      tagverify = false,
+      manualTagging = false,
+      note = '',
+      autocharPresets = [],
+      trainProfile: trainProfileRaw = '',
+      samplePrompts = [],
+    } = req.body || {};
     if (!Array.isArray(uploads) || !uploads.length) return res.status(400).json({ error: 'no uploads to commit' });
     const placeholders = uploads.map(() => "?").join(",");
     const rows = await dbQuery(
@@ -1621,6 +1683,7 @@ app.post('/api/upload/commit', async (req, res) => {
     const flagsAutocharPresets = Array.isArray(autocharPresets) ? autocharPresets.filter(Boolean).map(String) : [];
     const type = flagsAutocharPresets[0] || 'general';
     const trainProfile = await resolveTrainProfileName(trainProfileRaw);
+    const normalizedSamplePrompts = normalizeSamplePrompts(samplePrompts);
     const flags = {
       autotag: manualFlag ? true : !!autotag,
       autochar: manualFlag ? false : !!autochar,
@@ -1635,6 +1698,9 @@ app.post('/api/upload/commit', async (req, res) => {
       autocharPresets: flagsAutocharPresets,
       trainProfile,
     };
+    if (normalizedSamplePrompts.length) {
+      flags.samplePrompts = normalizedSamplePrompts;
+    }
 
     const createdRuns = [];
     for (const row of rows) {
@@ -1786,6 +1852,7 @@ async function runWorkflow(run, flags) {
         RUN_ID: run.runId,
         RUN_DB: path.join(STORAGE_ROOT, 'db.sqlite'),
         AUTOCHAR_PRESET: flags.autocharPreset || '',
+        SAMPLE_PROMPTS: flags.samplePrompts ? JSON.stringify(flags.samplePrompts) : '',
         DB_BROKER_URL: process.env.DB_BROKER_URL || '',
       },
     });

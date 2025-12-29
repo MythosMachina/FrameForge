@@ -74,18 +74,54 @@
               <div class="file-name" id="selected-file"></div>
             </div>
           </label>
-          <div class="staged-block">
-            <div class="staged-head">
-              <span>Staged files</span>
-              <span class="info" data-tip="Files upload immediately and stay staged for 5 minutes. Click Launch to create jobs.">i</span>
-            </div>
-            <div id="staged-list" class="staged-list">
-              <div class="hint">Drop ZIPs to start staging. Staged items will appear here.</div>
-            </div>
-          </div>
           </div>
           <div class="form upload-right">
-          <div class="toggle-groups">
+            <div class="actions upload-actions">
+              <button class="btn primary" type="submit">Launch Run</button>
+              <div class="hint">RunID will prefix the working folder but will be stripped from trigger tags and final downloads.</div>
+              <div class="status-msg" id="upload-msg"></div>
+            </div>
+            <div class="toggle-group">
+              <div class="group-head">
+                <span>Sample prompts</span>
+                <span class="info" data-tip="Override settings prompts for this run only.">i</span>
+              </div>
+              <label class="field">
+                <input type="text" name="samplePrompt1" placeholder="Sample prompt 1 (optional)">
+                <input type="text" name="samplePrompt2" placeholder="Sample prompt 2 (optional)">
+                <input type="text" name="samplePrompt3" placeholder="Sample prompt 3 (optional)">
+              </label>
+            </div>
+          <div class="field">
+            <span>Notes / tags</span>
+            <input type="text" name="note" placeholder="Optional note for history">
+          </div>
+          </div>
+          <div class="form compact">
+            <div class="toggle-group">
+              <div class="group-head">
+                <span>Training & Performance</span>
+                <span class="info" data-tip="GPU usage and optional LoRA training.">i</span>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" name="train">
+                <span>train</span>
+                <span class="info" data-tip="Plan and run LoRA training on the finished dataset (GPU required).">i</span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" name="gpu">
+                <span>use GPU when available</span>
+                <span class="info" data-tip="Accelerate autotagging with CUDA if present. Training always uses GPU.">i</span>
+              </label>
+              <label class="field">
+                <span>Train profile</span>
+                <select name="trainProfileCategory" id="train-profile-category"></select>
+                <select name="trainProfile" id="train-profile">
+                  <option value="">loading...</option>
+                </select>
+                <span class="info" data-tip="Choose the training recipe applied to LoRA runs. Balanced = mid quality/speed; Fast = legacy quicker setup.">i</span>
+              </label>
+            </div>
             <div class="toggle-group">
               <div class="group-head">
                 <span>Tagging</span>
@@ -97,12 +133,12 @@
                 <span class="info" data-tip="Pause after crop/flip so tags can be edited manually. Autotag/autochar will be skipped.">i</span>
               </label>
               <label class="toggle">
-                <input type="checkbox" name="autotag" checked>
+                <input type="checkbox" name="autotag">
                 <span>autotag</span>
                 <span class="info" data-tip="Generate tags for each image with the selected model.">i</span>
               </label>
               <label class="toggle">
-                <input type="checkbox" name="autochar" checked>
+                <input type="checkbox" name="autochar">
                 <span>autochar</span>
                 <span class="info" data-tip="Remove unwanted tags using the AutoChar preset(s) you select. Runs after autotag.">i</span>
               </label>
@@ -110,6 +146,18 @@
                 <input type="checkbox" name="tagverify">
                 <span>tagverify</span>
                 <span class="info" data-tip="Optional color check: drops color tags that fail an HSV mask test. Use with autotag.">i</span>
+              </label>
+              <label class="field" id="autochar-presets-wrap">
+                <span>AutoChar presets (multi-select)</span>
+                <select name="autocharPresets" id="autochar-presets" multiple size="5">
+                  <option value="">(no preset)</option>
+                  <option value="human">human</option>
+                  <option value="furry">furry</option>
+                  <option value="dragon">dragon</option>
+                  <option value="daemon">daemon</option>
+                  <option value="default">default</option>
+                </select>
+                <div class="hint">Leave empty to apply no preset; only TagVerify (if enabled) will adjust tags.</div>
               </label>
             </div>
             <div class="toggle-group">
@@ -128,52 +176,15 @@
                 <span class="info" data-tip="Skip video capping/archive; treat input as already-capped images.">i</span>
               </label>
             </div>
-            <div class="toggle-group">
-              <div class="group-head">
-                <span>Training & Performance</span>
-                <span class="info" data-tip="GPU usage and optional LoRA training.">i</span>
-              </div>
-              <label class="toggle">
-                <input type="checkbox" name="train">
-                <span>train <span class="pill">Early Access</span></span>
-                <span class="info" data-tip="Plan and run LoRA training on the finished dataset (GPU required).">i</span>
-              </label>
-              <label class="toggle">
-                <input type="checkbox" name="gpu" checked>
-                <span>use GPU when available</span>
-                <span class="info" data-tip="Accelerate autotagging with CUDA if present. Training always uses GPU.">i</span>
-              </label>
-              <label class="field">
-                <span>Train profile</span>
-                <select name="trainProfileCategory" id="train-profile-category"></select>
-                <select name="trainProfile" id="train-profile">
-                  <option value="">loading...</option>
-                </select>
-                <span class="info" data-tip="Choose the training recipe applied to LoRA runs. Balanced = mid quality/speed; Fast = legacy quicker setup.">i</span>
-              </label>
+          </div>
+          <div class="staged-block staged-center">
+            <div class="staged-head">
+              <span>Staged files</span>
+              <span class="info" data-tip="Files upload immediately and stay staged for 5 minutes. Click Launch to create jobs.">i</span>
             </div>
-          </div>
-          <label class="field">
-            <span>AutoChar presets (multi-select)</span>
-            <select name="autocharPresets" id="autochar-presets" multiple size="5">
-              <option value="">(no preset)</option>
-              <option value="human">human</option>
-              <option value="furry">furry</option>
-              <option value="dragon">dragon</option>
-              <option value="daemon">daemon</option>
-              <option value="default">default</option>
-            </select>
-            <div class="hint">Leave empty to apply no preset; only TagVerify (if enabled) will adjust tags.</div>
-          </label>
-          <div class="field">
-            <span>Notes / tags</span>
-            <input type="text" name="note" placeholder="Optional note for history">
-          </div>
-          <div class="actions">
-            <button class="btn primary" type="submit">Launch Run</button>
-            <div class="hint">RunID will prefix the working folder but will be stripped from trigger tags and final downloads.</div>
-            <div class="status-msg" id="upload-msg"></div>
-          </div>
+            <div id="staged-list" class="staged-list">
+              <div class="hint">Drop ZIPs to start staging. Staged items will appear here.</div>
+            </div>
           </div>
         </form>
       </section>
