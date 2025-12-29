@@ -11,7 +11,7 @@ Use this to create new runs.
 Common options:
 - Autotag: writes tags to images automatically.
 - AutoChar: removes unwanted tags using presets.
-- TagVerify: extra check for color tags (slower, cleaner).
+- TagVerify (legacy): extra check for color tags (slower, cleaner).
 - Facecap: adds extra face crops for better faces.
 - Train: trains a LoRA after tagging.
 - GPU: speeds up autotagging and required for training.
