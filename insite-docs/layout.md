@@ -1,14 +1,15 @@
-# Folders & layout
+# Files and downloads
 
-You do not need these folders for normal use, but this is where files go:
+Most users only need the History tab for downloads. For reference:
 
-- `INBOX/` - incoming uploads after unzip
-- `_system/workflow/capped` - extracted frames
-- `_system/workflow/raw` - raw capped frames
-- `_system/workflow/work` - selected + cropped images
-- `_system/workflow/ready` - autotag staging
-- `OUTPUTS/datasets` - finished datasets
-- `OUTPUTS/loras` - finished LoRAs
-- `ARCHIVE/mp4` - archived source videos
-- `ARCHIVE/zips` - downloadable ZIPs
-- `_system/db/db.sqlite` - app database
+## In the UI
+- History shows finished runs.
+- Each run has download links for dataset and (if trained) LoRA.
+
+## On disk (for admins)
+FrameForge stores files in local folders. Examples:
+- Datasets: `OUTPUTS/datasets`
+- LoRAs: `OUTPUTS/loras`
+- ZIP downloads: `ARCHIVE/zips`
+
+If you are not an admin, you can ignore this section.

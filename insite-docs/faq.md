@@ -1,10 +1,33 @@
 # FAQ
 
-- Why does the RunID show up? It helps track runs; it is removed from final tags and downloads.
-- Can I use CPU only? Yes, but it is slower. Training requires GPU.
-- Can I upload multiple ZIPs? Yes, stage many and launch them together.
-- Where do downloads appear? In History as Dataset/LoRA downloads.
-- What if a run fails? Check the error in History; you can retry with a new upload.
-- How do I improve tags? Use AutoChar presets and TagVerify for better color tags.
-- Do I need models? Autotag downloads its model; training needs models installed by an admin.
-- Can I pause a run? Manual Tagging pauses a run until you commit.
+## Why did my run stop?
+- The Queue may be paused.
+- A background service may be down.
+- Check System Status and ask an admin if needed.
+
+## I do not see my download
+- It appears only after the run finishes.
+- Check History and refresh the page.
+
+## Training is not available
+- Training requires a GPU.
+- Leave Train OFF if you do not have one.
+
+## The tags look wrong
+- Try enabling TagVerify.
+- Use Manual Tagging to correct tags.
+- Adjust AutoChar presets to remove noisy tags.
+
+## Which tagger model should I use?
+- Good all-rounder: `SmilingWolf/wd-swinv2-tagger-v3`.
+- You can download it in Tagger Models and set it in Settings.
+
+## How do notifications work?
+- Notifications are optional and must be configured by an admin.
+- If configured, you can enable them in Settings and pick channels.
+
+## Can I reorder runs?
+- Yes, if they are still in the Queue.
+
+## Can I delete a run?
+- Yes, from the History tab.

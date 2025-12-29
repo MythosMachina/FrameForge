@@ -1,7 +1,12 @@
-# Environment & services
+# System basics (non-technical)
 
-This page is for admins.
+You do not need to manage servers to use FrameForge, but it helps to know the basics.
 
-- The WebApp must be running to use the UI.
-- Training requires GPU and installed models.
-- If the UI does not load, contact an admin.
+## Background services
+FrameForge runs several background services:
+- WebApp: the UI you use.
+- Initiator: unpacks new uploads.
+- Orchestrator: runs the main workflow.
+- Finisher: packages results for download.
+
+If any service is down, the Queue may stop. Use the System Status panel or ask an admin.

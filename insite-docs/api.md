@@ -1,11 +1,14 @@
-# API
+# API (optional)
 
-Most users do not need the API. The WebApp handles all normal tasks.
+Most users never need the API. The WebApp already does everything you need.
 
-If your team uses integrations, these are the common endpoints:
-- `GET /api/queue` - current queue
-- `GET /api/history` - recent runs with downloads
-- `POST /api/upload` - upload ZIPs with options
-- `DELETE /api/run/:id` - delete a run and its files
-- `GET/POST/DELETE /api/autochar` - manage presets
-- `GET /health` - health check
+If your team uses automation, these are common endpoints:
+- GET /api/queue
+- GET /api/history
+- POST /api/upload
+- DELETE /api/run/:id
+- GET/POST/PUT/DELETE /api/autochar
+- GET /api/settings
+- GET /api/system/status
+
+Ask an admin before using the API.

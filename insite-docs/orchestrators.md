@@ -1,23 +1,20 @@
-# Orchestrators
+# Background workers (simple explanation)
 
-FrameForge runs three background services (orchestrators). Together they move each run through the pipeline from upload to download.
+FrameForge uses three workers so your run can move through the pipeline smoothly.
 
 ## Initiator
-- Watches the queue for new uploads.
-- Unzips the ZIP into the input folder.
-- Creates the run plan so progress can be tracked in the UI.
+- Takes a new upload from the Queue.
+- Unzips it and prepares the run plan.
 
 ## Orchestrator
-- Runs the main workflow (rename, capping, selection, crop/flip, autotag, training).
-- Updates progress steps shown in Queue and History.
-- Pauses the run if Manual Tagging is enabled, then resumes after you commit.
+- Runs the main workflow (rename, select, crop, autotag, training).
+- Updates progress for the Queue.
 
 ## Finisher
-- Packages datasets and LoRAs into downloadable ZIPs.
-- Collects training outputs and sample images.
-- Cleans staging folders after completion.
+- Packages the dataset and LoRA into ZIPs.
+- Cleans up training staging files.
 
-## What users should know
-- You do not need to start these manually.
-- If a run looks stuck, check Queue status first, then ask an admin to check the services.
-- Only one run moves through the workflow at a time to keep results stable.
+## What you should know
+- You do not start these manually.
+- If something looks stuck, check System Status first.
+- Only one run is processed at a time to keep results stable.

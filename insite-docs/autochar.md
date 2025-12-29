@@ -1,35 +1,30 @@
-# AutoChar
+# AutoChar (tag cleanup)
 
-AutoChar removes unwanted tags after autotagging. Presets are shared in the WebApp.
+AutoChar removes unwanted tags after Autotag. You control it with presets.
 
-## How presets work
-- You can select multiple presets during upload.
-- All rules from selected presets are combined.
-- The trigger tag (the folder name without RunID) is always kept.
+## What it does
+- Keeps the first tag (the trigger) always.
+- Removes any tag that matches a preset rule.
 
-## Rules (clear words + wildcards)
-- Add one tag or wildcard per line (or comma-separated).
+## Presets
+- Create or edit presets in the AutoChar tab.
+- You can select one or more presets during Upload.
+- If AutoChar is ON and no preset is selected, a default preset is used (if available).
+
+## Rules (simple)
+- One pattern per line (or comma-separated).
 - Wildcards use `*` and are case-insensitive.
-- `_` and spaces are treated the same (e.g., `blue_hair` matches `blue hair`).
-- The trigger tag (first tag) is always preserved.
+- Spaces and underscores are treated the same.
 
 Examples:
+- `blue_hair` removes only blue hair tags.
 - `*_hair` removes any hair color tag.
-- `blue_hair` removes only blue hair.
 - `bikini, swimsuit` removes both tags.
 
-## Macros (file-based)
-Macros expand to multiple tags using preset macro files in `preset/macros/`.
-Macro names come from the filename (e.g., `colors.txt` -> `@colors`).
+## Macros (optional)
+Macros expand to many tags at once.
+- Use `@macro` in a preset rule.
+- Example: `@colors:hair` expands to all hair color tags.
+- If a macro is unknown, it is ignored.
 
-Examples:
-- `@colors:hair` removes all color hair tags (e.g., `blonde_hair`, `blue_hair`).
-- `@colors:eyes` removes all color eye tags.
-- `@colors:fur` removes all color fur tags.
-- `@animals:girl` removes `cat girl`, `wolf girl`, etc. if `animals.txt` exists.
-Note: Macro names come from files in `preset/macros/` (e.g., `colors.txt` -> `@colors`).
-
-Macro sources:
-- `preset/macros/colors.txt`
-
-Edit presets in the AutoChar editor. Changes apply immediately.
+Tip: Use AutoChar to remove noisy or repetitive tags so your dataset stays clean.
