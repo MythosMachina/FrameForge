@@ -1,7 +1,16 @@
-# Cleaning & recovery
+# Clean up and recovery
 
-- Delete a run in History to remove its database entry and files.
-- Staged uploads expire automatically after a few minutes.
-- If a run is stuck, ask an admin to restart the services.
+You can remove old runs and free space safely from the UI.
 
-Advanced cleanup is handled by administrators.
+## Delete a run (safe)
+- Open History.
+- Click Delete on a run.
+- This removes its files and DB entry.
+
+## If a run is stuck
+- Check System Status first.
+- If a service is red, ask an admin to restart it.
+
+## What not to do
+- Do not delete files by hand unless you know what you are doing.
+- Use the UI whenever possible.

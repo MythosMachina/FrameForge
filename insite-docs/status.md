@@ -1,7 +1,13 @@
-# Status & colors
+# Status and Colors
 
-- Amber: running / in progress
-- Green: finished / ready
-- Red: failed
+The system status panel shows the health of background services.
 
-Queue and History show short step hints (rename, autotag, training, packaging).
+## Colors
+- Green (OK): service is running.
+- Yellow (Busy/Waiting): service is working or waiting on work.
+- Red (Fail): service is down or unresponsive.
+
+## What to do if something is wrong
+- If one service is red, wait a minute and refresh.
+- If it stays red, ask an admin to restart the service.
+- If the Queue is paused, runs will not start.
