@@ -14,7 +14,7 @@
 - Leave Train OFF if you do not have one.
 
 ## The tags look wrong
-- Try enabling TagVerify.
+- Try enabling TagVerify (legacy).
 - Use Manual Tagging to correct tags.
 - Adjust AutoChar presets to remove noisy tags.
 
